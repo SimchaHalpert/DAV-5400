@@ -1,54 +1,16 @@
-"""Bathroom mockup builder.
-
-Fill in products.txt (vanity, faucet, mirror links + finish), then run:
-
-    python mockup.py
-
-The script pulls each product photo from its page, removes the background,
-scales every item to its real size in inches, and draws them on a wall:
-vanity on the floor, faucet on the counter, mirror above. Labels show each
-product's name, finish, and size, and a ruler marks the key heights.
-"""
+"""Pull a product's photo, name, and size from its web page, and cut the
+product out of its photo background."""
 
 import io
 import json
 import re
-import sys
 from collections import deque
-from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import numpy as np
 import requests
 from bs4 import BeautifulSoup
-from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageFont
-
-HERE = Path(__file__).resolve().parent
-CONFIG_FILE = HERE / "products.txt"
-OUTPUT_FILE = HERE / "mockup.png"
-
-ITEMS = ["VANITY", "FAUCET", "MIRROR"]
-DEFAULT_SETTINGS = {
-    "WALL_COLOR": "#EEEBE6",
-    "FLOOR_COLOR": "#BCA98F",
-    "MIRROR_GAP": "6",
-    "LABELS": "yes",
-    "PIXELS_PER_INCH": "20",
-}
-MIRROR_MIN_BOTTOM_IN = 40     # mirror bottom never lower than this off the floor
-MARGIN_IN = 4                 # space around the items, inches
-FLOOR_BAND_IN = 4             # visible floor strip under the floor line
-RULER_COL_IN = 10             # left column for height marks
-LABEL_COL_IN = 34             # right column for product labels
-
-# Used only when neither products.txt nor the website gives a size.
-DEFAULT_HEIGHT_IN = {"VANITY": 34.5, "FAUCET": 7.0, "MIRROR": 30.0}
-# Sizes outside these ranges (inches) are treated as misreads and ignored.
-SANE_RANGE = {
-    "VANITY": {"HEIGHT": (18, 50), "WIDTH": (12, 96)},
-    "FAUCET": {"HEIGHT": (2, 25), "WIDTH": (1, 20)},
-    "MIRROR": {"HEIGHT": (12, 72), "WIDTH": (10, 96)},
-}
+from PIL import Image, ImageDraw, ImageFilter
 
 HEADERS = {
     "User-Agent": (
@@ -58,24 +20,24 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+# Sizes outside these ranges (inches) are treated as misreads and ignored.
+SANE_RANGE = {
+    "vanity":        {"HEIGHT": (18, 50), "WIDTH": (12, 120), "DEPTH": (12, 26)},
+    "faucet":        {"HEIGHT": (2, 25), "WIDTH": (1, 20), "DEPTH": (2, 14)},
+    "mirror":        {"HEIGHT": (12, 72), "WIDTH": (10, 96), "DEPTH": (0.25, 8)},
+    "sconce":        {"HEIGHT": (4, 36), "WIDTH": (2, 16), "DEPTH": (2, 14)},
+    "vanity_light":  {"HEIGHT": (3, 20), "WIDTH": (8, 72), "DEPTH": (2, 14)},
+    "toilet":        {"HEIGHT": (14, 36), "WIDTH": (12, 24), "DEPTH": (18, 32)},
+    "tub":           {"HEIGHT": (12, 30), "WIDTH": (48, 80), "DEPTH": (26, 45)},
+    "shower":        {"HEIGHT": (60, 96), "WIDTH": (30, 96), "DEPTH": (30, 72)},
+    "shower_trim":   {"HEIGHT": (4, 80), "WIDTH": (2, 30), "DEPTH": (1, 24)},
+    "ceiling_light": {"HEIGHT": (2, 40), "WIDTH": (6, 40), "DEPTH": (6, 40)},
+    "door":          {"HEIGHT": (72, 96), "WIDTH": (18, 42), "DEPTH": (1, 3)},
+    "window":        {"HEIGHT": (12, 72), "WIDTH": (12, 96), "DEPTH": (1, 8)},
+}
 
-# ---------------------------------------------------------------- config
 
-def read_config(path):
-    items, section = {}, None
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        m = re.fullmatch(r"\[(\w+)\]", line)
-        if m:
-            section = m.group(1).upper()
-            items[section] = {}
-        elif section and "=" in line:
-            key, value = line.split("=", 1)
-            items[section][key.strip().upper()] = value.strip()
-    return items
-
+# ---------------------------------------------------------------- numbers
 
 UNICODE_FRACTIONS = {"½": " 1/2", "¼": " 1/4", "¾": " 3/4", "⅛": " 1/8",
                      "⅜": " 3/8", "⅝": " 5/8", "⅞": " 7/8", "⅓": " 1/3", "⅔": " 2/3"}
@@ -97,7 +59,7 @@ def to_inches(value):
     number = float(m.group(1))
     if m.group(2) and float(m.group(3)):
         number += float(m.group(2)) / float(m.group(3))
-    return number if 0 <= number <= 150 else None
+    return number if 0 <= number <= 1000 else None
 
 
 def fmt_in(x):
@@ -110,6 +72,14 @@ def fmt_in(x):
     while rest % 2 == 0:
         rest, den = rest // 2, den // 2
     return f'{whole}-{rest}/{den}"' if whole else f'{rest}/{den}"'
+
+
+def fmt_dim(x):
+    """Architectural style: 96 -> 8'-0\", 34.5 -> 34-1/2\", 62.5 -> 5'-2 1/2\"."""
+    if x < 24:
+        return fmt_in(x)
+    feet, inches = divmod(round(x * 8) / 8, 12)
+    return f"{int(feet)}'-{fmt_in(inches).replace('-', ' ')}"
 
 
 # ---------------------------------------------------------------- page parsing
@@ -243,19 +213,23 @@ def product_name(soup):
 
 # Label words that point to the whole product's size vs. a part of it.
 GOOD_WORDS = {"overall": 3, "total": 3, "product": 2, "assembled": 2, "item": 1,
-              "with top": 2, "with countertop": 2, "including": 1, "faucet": 1, "mirror": 1}
+              "with top": 2, "with countertop": 2, "including": 1}
 BAD_WORDS = ["spout", "handle", "rough", "backsplash", "toe", "kick", "drawer", "door",
              "package", "packaged", "shipping", "carton", "box", "sink", "bowl", "basin",
              "drain", "opening", "hole", "deck", "clearance", "interior", "inside", "seat",
-             "lever", "reach", "center", "spread", "shelf", "leg", "bevel", "frame depth"]
+             "lever", "reach", "center", "spread", "shelf", "leg", "bevel", "frame depth",
+             "water", "soaking", "rim", "canopy", "shade", "backplate", "chain", "glass"]
+DIM_WORDS = {"height": "HEIGHT", "h": "HEIGHT", "width": "WIDTH", "w": "WIDTH",
+             "depth": "DEPTH", "d": "DEPTH", "length": "WIDTH", "l": "WIDTH"}
 UNIT = r"(?P<unit>inches|inch|in\b\.?|\"|''|cm\b|mm\b)"
 NUM = r"(?P<num>\d+(?:\.\d+)?(?:[\s-]+\d+/\d+)?)"
 LABEL_FIRST = re.compile(
-    r"\b(?P<dim>height|width|h|w)\b(?P<mid>(?:\s+(?:with|w/|incl\.?|including|without|top|countertop|counter|and|sink|mirror|frame))*)"
-    r"\s*(?:\(\s*(?P<unit1>in|inches|cm|mm)\.?\s*\))?\s*[:=\-]?\s*"
-    + NUM + r"\s*" + UNIT + "?"
+    r"\b(?P<dim>height|width|depth|length|h|w|d|l)\b"
+    r"(?P<mid>(?:\s+(?:with|w/|incl\.?|including|without|top|countertop|counter|and|sink|mirror|frame))*)"
+    r"\s*(?:\(\s*(?P<unit1>in|inches|cm|mm)\.?\s*\))?\s*[:=\-]?\s*" + NUM + r"\s*" + UNIT + "?"
 )
-NUMBER_FIRST = re.compile(NUM + r"\s*" + UNIT + r"\s*\(?\s*(?P<dim>height|width|h|w)\b")
+# "36 in. W x 22 in. D x 34.5 in. H" (single letters only, so "19 in. Depth 28" isn't read as depth 19)
+NUMBER_FIRST = re.compile(NUM + r"\s*" + UNIT + r"\s*\(?\s*(?P<dim>h|w|d|l)\b")
 
 
 def label_before(text, pos):
@@ -284,39 +258,43 @@ def to_unit_inches(num, unit):
     return value
 
 
-def find_dimensions(soup, item):
-    """Best guess of the product's overall height/width in inches."""
-    ranges = SANE_RANGE[item]
-    found = {"HEIGHT": [], "WIDTH": []}
+def parse_value(text):
+    m = re.search(NUM + r"\s*" + UNIT + "?", normalize(text.lower()))
+    return to_unit_inches(m.group("num"), m.group("unit") or "in") if m else None
+
+
+def find_dimensions(soup, kind):
+    """Best guess of the product's overall height/width/depth in inches."""
+    ranges = SANE_RANGE.get(kind, {})
+    found = {"HEIGHT": [], "WIDTH": [], "DEPTH": []}
 
     def add(key, value, score):
-        low, high = ranges[key]
+        low, high = ranges.get(key, (0.1, 500))
         if value is not None and low <= value <= high:
             found[key].append((score, value))
 
     spec_text = []
     for product in json_ld_products(soup):
-        for key in ("HEIGHT", "WIDTH"):
+        for key in found:
             val = product.get(key.lower())
             if isinstance(val, dict):
                 unit = {"CMT": "cm", "MMT": "mm"}.get(val.get("unitCode"), val.get("unitText") or "in")
                 val = f'{val.get("value", "")} {unit}'
             if val:
-                add(key, _parse_value(str(val)), 4)
+                add(key, parse_value(str(val)), 4)
         for prop in as_list(product.get("additionalProperty")):
             if isinstance(prop, dict):
                 spec_text.append(f'{prop.get("name", "")}: {prop.get("value", "")} {prop.get("unitText", "")}')
 
-    texts = [(" . ".join(spec_text), 1), (soup.get_text(" ", strip=True), 0)]
-    for text, bonus in texts:
+    for text, bonus in ((" . ".join(spec_text), 1), (soup.get_text(" ", strip=True), 0)):
         text = normalize(text.lower())
         for m in LABEL_FIRST.finditer(text):
-            key = "HEIGHT" if m.group("dim") in ("height", "h") else "WIDTH"
+            key = DIM_WORDS[m.group("dim")]
             unit = m.group("unit1") or m.group("unit")
             context = label_before(text, m.start("dim")) + m.group("dim") + m.group("mid")
             add(key, to_unit_inches(m.group("num"), unit), score_label(context) + bonus)
         for m in NUMBER_FIRST.finditer(text):
-            key = "HEIGHT" if m.group("dim") in ("height", "h") else "WIDTH"
+            key = DIM_WORDS[m.group("dim")]
             context = label_before(text, m.start())
             add(key, to_unit_inches(m.group("num"), m.group("unit")), score_label(context) + bonus + 1)
 
@@ -327,11 +305,6 @@ def find_dimensions(soup, item):
             if best > -5:                       # every match was a part, not the product
                 dims[key] = next(v for s, v in options if s == best)
     return dims
-
-
-def _parse_value(text):
-    m = re.search(NUM + r"\s*" + UNIT + "?", normalize(text.lower()))
-    return to_unit_inches(m.group("num"), m.group("unit") or "in") if m else None
 
 
 # ---------------------------------------------------------------- photos
@@ -361,23 +334,23 @@ def studio_score(img):
     return plain if median.min() > 200 else plain * 0.5
 
 
-def get_product(name, entry):
-    url, finish = entry.get("URL", ""), entry.get("FINISH", "")
+def get_product(label, url, finish, kind, prefer_studio=True):
+    """Returns (photo, dimensions dict, product name)."""
     resp = fetch(url)
     if resp.headers.get("Content-Type", "").startswith("image/"):
-        print(f"  {name}: direct image link")
+        print(f"  {label}: direct image link")
         img = Image.open(io.BytesIO(resp.content))
         img.load()
         return img, {}, ""
 
-    soup = BeautifulSoup(resp.content, "html.parser")  # detects encoding (keeps ½ etc.)
+    soup = BeautifulSoup(resp.content, "html.parser")   # detects encoding (keeps ½ etc.)
     cands = collect_candidates(soup, resp.url)
     if not cands:
         raise RuntimeError("no product photo found on the page")
     scored = [(finish_score(finish, text, u), i, u) for i, (u, text) in enumerate(cands)]
     scored.sort(key=lambda s: (-s[0], s[1]))
     if finish and scored[0][0] == 0:
-        print(f"  {name}: WARNING - no photo labeled '{finish}', using the main photo")
+        print(f"  {label}: WARNING - no photo labeled '{finish}', using the main photo")
 
     # Among the photos that best match the finish, prefer a plain studio shot
     # over a room/lifestyle shot, which is much harder to cut out.
@@ -391,7 +364,7 @@ def get_product(name, entry):
             continue
         if min(img.size) < 200:            # skip thumbnails
             continue
-        studio = studio_score(img)
+        studio = studio_score(img) if prefer_studio else 1.0
         key = (fscore, studio >= 0.85)
         if best is None or key > best_key:
             best, best_key = (img, img_url, studio), key
@@ -400,11 +373,11 @@ def get_product(name, entry):
     if best is None:
         raise RuntimeError("could not download a usable product photo")
     img, img_url, studio = best
-    print(f"  {name}: photo {img_url}")
+    print(f"  {label}: photo {img_url}")
     if studio < 0.85:
-        print(f"  {name}: WARNING - photo has a busy background; the cut-out may be rough. "
+        print(f"  {label}: WARNING - photo has a busy background; the cut-out may be rough. "
               "Paste a plain-background photo's image address as the URL for a cleaner result.")
-    return img, find_dimensions(soup, name), product_name(soup)
+    return img, find_dimensions(soup, kind), product_name(soup)
 
 
 # ---------------------------------------------------------------- background removal
@@ -496,229 +469,36 @@ def trim(img):
     return img.crop(box) if box else img
 
 
-def real_size(name, entry, scraped, img):
-    """Width/height in inches: products.txt > website > photo proportions > default.
+def dominant_color(img):
+    """Median color of the visible pixels."""
+    arr = np.asarray(img.convert("RGBA").resize((80, max(1, round(80 * img.height / img.width)))))
+    px = arr[arr[:, :, 3] > 128][:, :3] if arr.shape[2] == 4 else arr.reshape(-1, 3)
+    if not len(px):
+        return (200, 200, 200)
+    return tuple(int(c) for c in np.median(px, axis=0))
+
+
+def real_size(label, kind, entry, scraped, img, default):
+    """(width, height, depth) in inches: project file > website > photo proportions > default.
     The photo is never stretched more than 15%; beyond that it's probably an
     angled shot, so height wins and width follows the photo."""
     h = to_inches(entry.get("HEIGHT")) or scraped.get("HEIGHT")
     w = to_inches(entry.get("WIDTH")) or scraped.get("WIDTH")
+    d = to_inches(entry.get("DEPTH")) or scraped.get("DEPTH") or default[2]
+    if img is None:
+        return w or default[0], h or default[1], d
     aspect = img.width / img.height
     if h and w:
         stretch = (w / h) / aspect
         if not 0.85 <= stretch <= 1.15:
-            print(f"  {name}: photo proportions don't match {fmt_in(w)} x {fmt_in(h)} "
-                  "(angled shot?). Sizing by height.")
-            w = h * aspect
+            print(f"  {label}: photo proportions don't match {fmt_in(w)} x {fmt_in(h)} "
+                  "(angled shot?). Photo sized by height; plan uses the listed width.")
     elif h:
         w = h * aspect
     elif w:
         h = w / aspect
     else:
-        h = DEFAULT_HEIGHT_IN[name]
+        h = default[1]
         w = h * aspect
-        print(f"  {name}: WARNING - no size found, guessing {fmt_in(h)} tall. Set HEIGHT in products.txt.")
-    return w, h
-
-
-# ---------------------------------------------------------------- drawing
-
-def load_font(size):
-    for name in ("DejaVuSans.ttf", "Arial.ttf", "arial.ttf", "Helvetica.ttc",
-                 "/System/Library/Fonts/Helvetica.ttc", "/Library/Fonts/Arial.ttf",
-                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
-        try:
-            return ImageFont.truetype(name, size)
-        except OSError:
-            continue
-    try:
-        return ImageFont.load_default(size=size)
-    except TypeError:                      # Pillow < 10.1
-        return ImageFont.load_default()
-
-
-def parse_color(value):
-    if not value or value.lower() in ("none", "transparent", "no"):
-        return None
-    try:
-        return ImageColor.getrgb(value)[:3] + (255,)
-    except ValueError:
-        print(f"  Unknown color '{value}', using default")
-        return None
-
-
-def plan_layout(parts, settings):
-    """Bottom height (inches off floor) for each item."""
-    gap = to_inches(settings["MIRROR_GAP"]) or 0
-    layout = {}
-    counter = DEFAULT_HEIGHT_IN["VANITY"]
-    if "VANITY" in parts:
-        p = parts["VANITY"]
-        bottom = p["off_floor"] if p["off_floor"] is not None else 0.0
-        layout["VANITY"] = bottom
-        counter = bottom + p["h"]
-    faucet_top = counter
-    if "FAUCET" in parts:
-        p = parts["FAUCET"]
-        bottom = p["off_floor"] if p["off_floor"] is not None else counter
-        layout["FAUCET"] = bottom
-        faucet_top = bottom + p["h"]
-    if "MIRROR" in parts:
-        p = parts["MIRROR"]
-        default = max(faucet_top + gap, MIRROR_MIN_BOTTOM_IN)
-        layout["MIRROR"] = p["off_floor"] if p["off_floor"] is not None else default
-    return layout
-
-
-def draw_mockup(parts, settings):
-    layout = plan_layout(parts, settings)
-    ppi = int(to_inches(settings["PIXELS_PER_INCH"]) or 20)
-    wall = parse_color(settings["WALL_COLOR"])
-    floor_color = parse_color(settings["FLOOR_COLOR"]) or (188, 169, 143, 255)
-    labels = settings["LABELS"].lower() in ("yes", "y", "true", "1", "on")
-    ink = (70, 66, 60, 255)
-    faint = (70, 66, 60, 90)
-
-    items_w = max(p["w"] for p in parts.values()) + 2 * MARGIN_IN
-    left = RULER_COL_IN if labels else 0
-    right = LABEL_COL_IN if labels else 0
-    top_in = max(layout[n] + parts[n]["h"] for n in parts)
-    total_w = left + items_w + right
-    total_h = top_in + MARGIN_IN + FLOOR_BAND_IN
-    W, H = round(total_w * ppi), round(total_h * ppi)
-
-    canvas = Image.new("RGBA", (W, H), wall or (0, 0, 0, 0))
-    draw = ImageDraw.Draw(canvas)
-    floor_y = round((total_h - FLOOR_BAND_IN) * ppi)
-    if wall:
-        draw.rectangle([0, floor_y, W, H], fill=floor_color)
-    draw.line([0, floor_y, W, floor_y], fill=ink, width=max(2, ppi // 8))
-
-    def y_of(inches):
-        return round(floor_y - inches * ppi)
-
-    center_x = (left + items_w / 2) * ppi
-    boxes = {}
-    for name in ["MIRROR", "VANITY", "FAUCET"]:   # faucet drawn last, on top
-        if name not in parts:
-            continue
-        p = parts[name]
-        img = p["img"].resize((max(1, round(p["w"] * ppi)), max(1, round(p["h"] * ppi))), Image.LANCZOS)
-        x = round(center_x - img.width / 2)
-        y = y_of(layout[name] + p["h"])
-        canvas.alpha_composite(img, (x, y))
-        boxes[name] = (x, y, x + img.width, y + img.height)
-
-    if labels:
-        font = load_font(max(12, round(ppi * 0.95)))
-        small = load_font(max(10, round(ppi * 0.8)))
-        line_h = round(ppi * 1.3)
-        draw_ruler(draw, parts, layout, boxes, left * ppi, y_of, font, ink, faint, ppi)
-        draw_labels(draw, parts, boxes, (left + items_w) * ppi, H, font, small, line_h, ink, ppi)
-    return canvas, layout
-
-
-def draw_ruler(draw, parts, layout, boxes, col_right, y_of, font, ink, faint, ppi):
-    """Height marks on the left: counter, faucet top, mirror bottom and top."""
-    marks = []
-    if "VANITY" in parts:
-        marks.append((layout["VANITY"] + parts["VANITY"]["h"], "VANITY", "counter"))
-        if layout["VANITY"] > 0:
-            marks.append((layout["VANITY"], "VANITY", "vanity bottom"))
-    if "FAUCET" in parts:
-        marks.append((layout["FAUCET"] + parts["FAUCET"]["h"], "FAUCET", "faucet top"))
-    if "MIRROR" in parts:
-        marks.append((layout["MIRROR"], "MIRROR", "mirror bottom"))
-        marks.append((layout["MIRROR"] + parts["MIRROR"]["h"], "MIRROR", "mirror top"))
-
-    line_x = col_right - ppi * 1.5
-    draw.line([line_x, y_of(0), line_x, y_of(max(m[0] for m in marks))], fill=ink, width=2)
-    last_y = None
-    for inches, item, what in sorted(marks):
-        y = y_of(inches)
-        draw.line([line_x - ppi * 0.6, y, line_x + ppi * 0.6, y], fill=ink, width=2)
-        draw.line([line_x + ppi * 0.6, y, boxes[item][0], y], fill=faint, width=1)
-        if last_y is not None and last_y - y < ppi * 2.2:   # too close to the previous mark
-            continue
-        draw.text((line_x - ppi * 0.9, y), fmt_in(inches), font=font, fill=ink, anchor="rb")
-        draw.text((line_x - ppi * 0.9, y + 2), what, font=font, fill=(70, 66, 60, 160), anchor="rt")
-        last_y = y
-
-
-def draw_labels(draw, parts, boxes, col_left, canvas_h, font, small, line_h, ink, ppi):
-    """Name, finish, and size to the right of each item, spread so they don't overlap."""
-    blocks = []
-    for name, p in parts.items():
-        title = p["name"] or name.title()
-        if len(title) > 36:
-            title = title[:35].rstrip() + "…"
-        lines = [(name, small), (title, font)]
-        if p["finish"]:
-            lines.append((p["finish"], font))
-        lines.append((f'{fmt_in(p["w"])} W x {fmt_in(p["h"])} H', font))
-        x0, y0, x1, y1 = boxes[name]
-        blocks.append([(y0 + y1) / 2, name, lines])
-
-    blocks.sort(key=lambda b: b[0])
-    heights = [len(b[2]) * line_h for b in blocks]
-    tops = [b[0] - hgt / 2 for b, hgt in zip(blocks, heights)]
-    for i in range(1, len(tops)):          # push down to avoid overlap
-        tops[i] = max(tops[i], tops[i - 1] + heights[i - 1] + ppi)
-    overflow = tops[-1] + heights[-1] - (canvas_h - ppi)
-    if overflow > 0:                       # then pull back up if off the bottom
-        tops = [t - overflow for t in tops]
-        for i in range(len(tops) - 2, -1, -1):
-            tops[i] = min(tops[i], tops[i + 1] - heights[i] - ppi)
-
-    text_x = col_left + ppi * 2
-    for (mid, name, lines), top in zip(blocks, tops):
-        x1 = boxes[name][2]
-        draw.line([x1 + ppi * 0.4, mid, text_x - ppi * 0.6, top + line_h * 0.6], fill=ink, width=2)
-        for i, (text, fnt) in enumerate(lines):
-            color = (70, 66, 60, 150) if i == 0 else ink
-            draw.text((text_x, top + i * line_h), text, font=fnt, fill=color)
-
-
-# ---------------------------------------------------------------- main
-
-def main():
-    config_path = Path(sys.argv[1]) if len(sys.argv) > 1 else CONFIG_FILE
-    config = read_config(config_path)
-    settings = {**DEFAULT_SETTINGS, **{k: v for k, v in config.get("SETTINGS", {}).items() if v}}
-
-    parts = {}
-    for name in ITEMS:
-        entry = config.get(name, {})
-        if not entry.get("URL"):
-            print(f"  {name}: no URL, skipped")
-            continue
-        try:
-            raw, scraped, title = get_product(name, entry)
-        except Exception as exc:
-            host = urlparse(entry["URL"]).netloc
-            print(f"  {name}: FAILED ({exc}). If {host} blocks bots, paste the image address instead.")
-            continue
-        img = remove_background(raw)
-        w, h = real_size(name, entry, scraped, img)
-        src = ("products.txt" if entry.get("HEIGHT") or entry.get("WIDTH")
-               else "website" if scraped.get("HEIGHT") or scraped.get("WIDTH") else "estimate")
-        print(f"  {name}: {fmt_in(w)} W x {fmt_in(h)} H (size from {src})")
-        parts[name] = {
-            "img": img, "w": w, "h": h,
-            "name": title, "finish": entry.get("FINISH", ""),
-            "off_floor": to_inches(entry.get("OFF_FLOOR")),
-        }
-
-    if not parts:
-        sys.exit("Nothing to draw. Fill in at least one URL in products.txt.")
-
-    canvas, layout = draw_mockup(parts, settings)
-    canvas.save(OUTPUT_FILE)
-    print(f"\nSaved {OUTPUT_FILE}  ({canvas.width}x{canvas.height}px)")
-    for name, bottom in layout.items():
-        p = parts[name]
-        print(f"  {name:<7} {fmt_in(p['w'])} W x {fmt_in(p['h'])} H, "
-              f"bottom {fmt_in(bottom)} / top {fmt_in(bottom + p['h'])} off floor")
-
-
-if __name__ == "__main__":
-    main()
+        print(f"  {label}: WARNING - no size found, guessing {fmt_in(h)} tall. Set HEIGHT in the project file.")
+    return w, h, d

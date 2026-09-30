@@ -1,0 +1,223 @@
+# =====================================================================
+#  BATHROOM DESIGNER - project file (primary_bath_10x12)
+#  10' x 12' primary bath: double vanity, freestanding tub under a window, walk-in shower, toilet.
+#
+#  Fill in / change what you want, save, then run:   python build.py project.txt
+#  Output: a PDF sheet set in the output/ folder.
+#
+#  All sizes are in INCHES (34.5 or 34 1/2 both work).
+#  URL      = product page link.  FINISH = finish name as the site shows it.
+#  WIDTH / HEIGHT / DEPTH: leave blank to read them from the website.
+#  INCLUDE  = yes / no  (no = leave this item out).
+#  WALL     = N, E, S or W  (north = top of the floor plan).
+#  POSITION = inches from the LEFT corner of that wall (standing in the
+#             room, facing the wall) to the CENTER of the item.
+#  OFF_FLOOR = inches from the floor to the bottom of the item.
+#
+#                         N (top)
+#               +---------------------+
+#               |                     |
+#          W    |        ROOM         |    E
+#               |                     |
+#               +---------------------+
+#                           S
+# =====================================================================
+
+
+[PROJECT]
+# Shows in the title block of every sheet. LOGO = path to your logo image (png/jpg).
+COMPANY   = Aggregate Construction Group
+LOGO      = logo.png
+CLIENT    = 
+PROJECT   = Bathroom remodel
+ROOM_NAME = Primary Bath
+TEMPLATE  = primary_bath_10x12
+
+[ROOM]
+# Room size in inches. WIDTH = west-east, LENGTH = north-south.
+# WALL_COLOR / TRIM_COLOR: hex code (#F2EFEA) or a name (white).
+WIDTH      = 120
+LENGTH     = 144
+CEILING    = 108
+WALL_COLOR = #F2EFEA
+TRIM_COLOR = #FFFFFF
+
+[VANITY]
+# SINKS = 1 or 2.
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     =          # blank = from website, else 72
+HEIGHT    = 
+DEPTH     = 
+WALL      = N
+POSITION  = 60
+OFF_FLOOR = 
+SINKS     = 2
+
+[FAUCET]
+# Sits on the vanity, one per sink. WALL/POSITION come from the vanity.
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+OFF_FLOOR = 
+
+[MIRROR]
+# Above the vanity. COUNT = number of mirrors (blank = one per sink).
+# OFF_FLOOR blank = MIRROR_GAP inches above the faucet (never below 40").
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+OFF_FLOOR = 
+COUNT     = 2
+
+[SCONCES]
+# Flank each mirror. OFF_FLOOR blank = centered at 66".
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+OFF_FLOOR = 
+
+[VANITY_LIGHT]
+# Above each mirror.
+INCLUDE   = no
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+OFF_FLOOR = 
+
+[TOILET]
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+WALL      = W
+POSITION  = 84
+OFF_FLOOR = 
+
+[TUB]
+# TYPE = alcove or freestanding. OFF_WALL = gap to the wall (freestanding).
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+WALL      = E
+POSITION  = 90
+OFF_FLOOR = 
+TYPE      = freestanding
+OFF_WALL  = 8
+
+[SHOWER]
+# WIDTH along the wall, DEPTH into the room. HEIGHT = glass height.
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     =          # blank = from website, else 60
+HEIGHT    = 
+DEPTH     =          # blank = from website, else 42
+WALL      = W
+POSITION  = 30
+OFF_FLOOR = 
+
+[SHOWER_TRIM]
+# Valve + shower head. OFF_FLOOR = height of the bottom of the valve.
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+WALL      = W
+POSITION  = 30
+OFF_FLOOR = 42
+
+[CEILING_LIGHT]
+# X / Y = inches from the north-west corner.
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+OFF_FLOOR = 
+X         = 60
+Y         = 72
+
+[DOOR]
+# SWING = left or right (hinge side, standing in the room facing the door).
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 30
+HEIGHT    = 
+DEPTH     = 
+WALL      = S
+POSITION  = 58
+OFF_FLOOR = 
+SWING     = left
+
+[WINDOW]
+# OFF_FLOOR = sill height.
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 36
+HEIGHT    = 48
+DEPTH     = 
+WALL      = E
+POSITION  = 90
+OFF_FLOOR = 42
+
+[WALL_TILE]
+# HEIGHT = tile height on the walls (0 = paint only, full = to ceiling).
+# TILE_SIZE = width x height as installed (12x3 = horizontal subway). PATTERN = stack or offset. GROUT = color.
+URL       = 
+FINISH    = 
+COLOR     = #F4F2EE
+TILE_SIZE = 12x3
+HEIGHT    = 0
+PATTERN   = offset
+GROUT     = #E6E3DE
+
+[SHOWER_TILE]
+# Tile inside the shower / tub surround. HEIGHT: inches or full.
+URL       = 
+FINISH    = 
+COLOR     = #EDEBE7
+TILE_SIZE = 12x3
+HEIGHT    = full
+PATTERN   = offset
+GROUT     = #E6E3DE
+
+[FLOOR_TILE]
+URL       = 
+FINISH    = 
+COLOR     = #CFC8BD
+TILE_SIZE = 48x24
+HEIGHT    = 
+PATTERN   = offset
+GROUT     = #BDB6AC
+
+[SETTINGS]
+# RENDER_WALL = which wall the rendering looks at (blank = the vanity wall).
+# GEMINI_API_KEY = key for the AI renderings (or set the GEMINI_API_KEY
+# environment variable). Blank = skip the AI sheets.
+MIRROR_GAP     = 6
+RENDER_WALL    = 
+GEMINI_API_KEY = 
+GEMINI_MODEL   = gemini-2.5-flash-image

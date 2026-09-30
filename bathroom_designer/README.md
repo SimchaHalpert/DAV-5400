@@ -30,6 +30,15 @@ pattern and direction, etc. The floor plan preview on the right updates as you c
 flags clearance problems. Click **Build PDF**, then **Open PDF**. Projects save to the `projects/`
 folder and can be reopened from the dropdown at the top.
 
+### Upload a plan
+In the web form, **Upload a plan** takes a PDF, photo, scan, or hand sketch. Type which room if the plan
+shows more than one, and click **Read plan**. Gemini reads the written dimensions and fixture locations,
+and the form fills in: room size, and wall / position / size for the vanity, toilet, tub, shower, door,
+and window. Everything it changed is highlighted in yellow, and anything it estimated (instead of reading
+a written dimension) is listed under the plan. Check those, then Build.
+Needs the Gemini API key (same one as the AI renderings) in Settings or the `GEMINI_API_KEY` variable.
+Tip: for a big construction set, export just the bathroom page (under 18 MB).
+
 ## Or: edit the text file directly
 1. Pick a starting layout:
    ```

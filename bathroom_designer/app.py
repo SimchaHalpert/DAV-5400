@@ -24,7 +24,9 @@ from drawings import draw_plan, fonts, parse_color
 from products import to_inches
 from project import (FIXED_SIZE, FIXTURES, SECTION_HELP, SIZE_FIELDS, TEMPLATES, TILES, Room, check_layout,
                      place_items, read_project, section_fields, template_values, write_values)
+from plans import read_plan
 from tiles import FLOOR_DIRECTIONS, PATTERNS, WALL_DIRECTIONS
+import os
 
 HERE = Path(__file__).resolve().parent
 PROJECTS = HERE / "projects"
@@ -188,6 +190,11 @@ class Handler(BaseHTTPRequestHandler):
             data = self.body()
             if url.path == "/api/preview":
                 return self.send(200, preview(data["values"]))
+            if url.path == "/api/plan":
+                key = data.get("key") or os.environ.get("GEMINI_API_KEY", "")
+                result = read_plan(base64.b64decode(data["file"]), data.get("mime") or "application/pdf", key,
+                                   room_hint=data.get("room", ""))
+                return self.send(200, result)
             if url.path == "/api/save":
                 path = save(data["name"], data["values"])
                 return self.send(200, {"saved": path.name})
@@ -231,6 +238,10 @@ aside{position:sticky;top:76px;align-self:start}
 pre{white-space:pre-wrap;font-size:12px;max-height:220px;overflow:auto;background:#faf9f7;border:1px solid var(--line);border-radius:6px;padding:8px}
 a.pdf{display:inline-block;margin-top:8px;font-weight:600;color:var(--accent)}
 .renders img{width:100%;border-radius:6px;margin-top:8px}
+.changed{background:#fff6cf !important;border-color:#e0c44d !important}
+.plan-view img,.plan-view object{width:100%;height:320px;object-fit:contain;border:1px solid var(--line);border-radius:6px;background:#fff}
+.check div{font-size:13px;margin:3px 0;color:#7a5a00}
+.row{display:flex;gap:8px;align-items:center;margin-top:8px}
 </style></head><body>
 <header><h1>Bathroom Designer</h1>
 <div class="bar"><select id="projectList"></select><button id="openBtn">Open</button></div>
@@ -240,6 +251,13 @@ a.pdf{display:inline-block;margin-top:8px;font-weight:600;color:var(--accent)}
 </header>
 <main><div id="form"></div>
 <aside>
+ <div class="panel"><b>Upload a plan</b>
+  <div class="help" style="padding:4px 0 0">PDF, photo, scan, or hand sketch. Gemini reads the room size and fixture
+  locations and fills in the form for you to check.</div>
+  <div class="row"><input type="file" id="planFile" accept=".pdf,image/*"></div>
+  <div class="row"><input id="planRoom" placeholder="Which room? (optional, e.g. Primary Bath)">
+   <button id="planBtn">Read plan</button></div>
+  <div id="planOut"></div></div>
  <div class="panel"><div class="bar" style="justify-content:space-between"><b>Floor plan preview</b><button id="prevBtn">Refresh</button></div>
   <div class="plans" id="plans" style="margin-top:10px"></div><div class="notes" id="notes"></div></div>
  <div class="panel"><label style="display:flex;gap:6px;align-items:center;color:var(--ink);font-size:13px;margin-bottom:10px">
@@ -299,6 +317,24 @@ $('openBtn').onclick=async()=>{const n=$('projectList').value;if(!n)return;const
   const h=t?t.hints:{};setValues(v,h);$('fileName').value=n;doPreview()};
 $('saveBtn').onclick=async()=>{const name=$('fileName').value||defaultName();const r=await api('/api/save',{name,values:values()});$('fileName').value=r.saved.replace(/\.txt$/,'');refreshProjects($('fileName').value)};
 $('prevBtn').onclick=doPreview;
+$('planFile').onchange=()=>{const f=$('planFile').files[0];if(!f)return;const url=URL.createObjectURL(f);
+  $('planOut').innerHTML=`<div class="plan-view" style="margin-top:10px">${f.type==='application/pdf'?`<object data="${url}" type="application/pdf"></object>`:`<img src="${url}">`}</div>`};
+$('planBtn').onclick=async()=>{const f=$('planFile').files[0];if(!f){alert('Choose a plan file first.');return}
+  const b=$('planBtn');b.disabled=true;b.textContent='Reading…';
+  const view=$('planOut').querySelector('.plan-view');const keep=view?view.outerHTML:'';
+  try{const data=await new Promise((ok,bad)=>{const rd=new FileReader();rd.onload=()=>ok(rd.result.split(',')[1]);rd.onerror=bad;rd.readAsDataURL(f)});
+    const key=(document.getElementById('SETTINGS.GEMINI_API_KEY')||{}).value||'';
+    const r=await api('/api/plan',{file:data,mime:f.type||'application/pdf',room:$('planRoom').value,key});
+    document.querySelectorAll('.changed').forEach(e=>e.classList.remove('changed'));
+    let n=0;for(const [sec,fields] of Object.entries(r.values))for(const [k,v] of Object.entries(fields)){
+      const el=document.getElementById(`${sec}.${k}`);if(!el)continue;if(el.value!==String(v)){el.value=v;el.classList.add('changed');n++;
+        const d=document.getElementById('sec-'+sec);if(d)d.open=true}}
+    marks();doPreview();
+    $('planOut').innerHTML=keep+`<div class="check" style="margin-top:8px"><b style="color:var(--ink)">Filled in ${n} fields (highlighted in yellow). Check them against the plan.</b>
+      ${r.notes.map(x=>`<div>• ${x}</div>`).join('')}</div>`;
+  }catch(e){$('planOut').innerHTML=keep+`<pre>${e.message}</pre>`}
+  b.disabled=false;b.textContent='Read plan'};
+document.addEventListener('input',e=>e.target.classList&&e.target.classList.remove('changed'));
 $('buildBtn').onclick=async()=>{const b=$('buildBtn');b.disabled=true;b.textContent='Building… (reading product sites)';$('result').innerHTML='';
   try{const name=$('fileName').value||defaultName();const r=await api('/api/build',{name,values:values(),no_ai:$('noAi').checked});
     $('fileName').value=r.name;refreshProjects(r.name);

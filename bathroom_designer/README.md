@@ -20,7 +20,17 @@ Optional, for much cleaner product cut-outs: `pip install "rembg[cpu]"`
 
 Put your logo in this folder as `logo.png`.
 
-## Use
+## Easiest: the web form
+```
+python app.py
+```
+Your browser opens a form (it runs only on your computer). Pick a layout, click **New from layout**,
+fill in the client and product links, and use the dropdowns for walls, tub type, door swing, tile
+pattern and direction, etc. The floor plan preview on the right updates as you change things and
+flags clearance problems. Click **Build PDF**, then **Open PDF**. Projects save to the `projects/`
+folder and can be reopened from the dropdown at the top.
+
+## Or: edit the text file directly
 1. Pick a starting layout:
    ```
    python build.py --templates
@@ -59,8 +69,13 @@ Warnings print in the terminal and on the schedule sheet in red.
 ## Tips
 - Terminal output shows where each size came from: `website`, `project file`, `photo`, or
   `standard size`. If it's not `website` for a key item, type the real size into the project file.
-- Tile: paste a tile product link (or just a `COLOR`), set `TILE_SIZE` as installed
-  (`12x3` = horizontal subway), `PATTERN` (stack / offset), and `HEIGHT` (inches, or `full`).
+- Tile (wall, shower, floor): paste a tile product link (or just a `COLOR`) and set:
+  - `TILE_SIZE`: e.g. `3x12`, `24x48` (order doesn't matter)
+  - `PATTERN`: stack, offset 1/2, offset 1/3, offset 1/4, herringbone, double herringbone,
+    chevron, basketweave, diagonal stack, diagonal offset
+  - `DIRECTION` (which way the long side runs): walls `horizontal` / `vertical`;
+    floor `along room length`, `across room width`, `east-west`, or `north-south`
+  - `HEIGHT` for wall and shower tile: inches, `0` (paint only), or `full`
 - `RENDER_WALL` picks which wall the rendering looks at (default: the vanity wall).
 - Some big retailers (Home Depot, Lowe's, Wayfair) block automated requests. If an item fails,
   right-click the product photo, choose **Copy image address**, paste that as the `URL`, and type

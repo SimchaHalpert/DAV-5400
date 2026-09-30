@@ -19,12 +19,13 @@ from project import (FIXTURES, FREESTANDING_TUB, TEMPLATES, TILES, WALL_NAMES, W
                      check_layout, included, parse_tile_size, place_items, read_project, template_size,
                      write_project)
 from render import ai_renders, composite_render
+from tiles import normalize_pattern
 from sheets import SheetSet, drawing_area, pick_scale, split, today
 
 HERE = Path(__file__).resolve().parent
 
 
-def load_items(cfg):
+def load_items(cfg, fetch=True):
     items = {}
     template = cfg.get("PROJECT", {}).get("TEMPLATE", "")
     for section, (kind, dw, dh, dd) in FIXTURES.items():
@@ -43,7 +44,7 @@ def load_items(cfg):
             extra["swing"] = (entry.get("SWING") or "right").lower()
         url, finish = entry.get("URL", ""), entry.get("FINISH", "")
         img, scraped, name = None, {}, ""
-        if url:
+        if url and fetch:
             try:
                 raw, scraped, name = get_product(section, url, finish, kind)
                 img = remove_background(raw)
@@ -62,14 +63,29 @@ def load_items(cfg):
     return items
 
 
-def load_tiles(cfg):
+def tile_direction(section, entry, room):
+    """-> (swap, description). swap = long side runs up (walls) / north-south (floor)."""
+    d = (entry.get("DIRECTION") or "").strip().lower()
+    if section == "FLOOR_TILE":
+        if d in ("along room length", "length", "across room width"):
+            ns = room.length >= room.width
+            if d == "across room width":
+                ns = not ns
+        else:
+            ns = d in ("north-south", "n-s", "ns", "vertical")
+        return ns, "north-south" if ns else "east-west"
+    vertical = d == "vertical"
+    return vertical, "vertical" if vertical else "horizontal"
+
+
+def load_tiles(cfg, room, fetch=True):
     tiles = {}
     for section, default_size in TILES.items():
         e = cfg.get(section)
         if not e:
             continue
         img = None
-        if e.get("URL"):
+        if e.get("URL") and fetch:
             try:
                 img, _, _ = get_product(section, e["URL"], e.get("FINISH", ""), "tile", prefer_studio=False)
             except Exception as exc:
@@ -80,10 +96,12 @@ def load_tiles(cfg):
             color = dominant_color(img.convert("RGBA").crop((w // 4, h // 4, 3 * w // 4, 3 * h // 4)))
         color = color or finish_color(e.get("FINISH"), (225, 222, 216))
         height = e.get("HEIGHT", "0").strip().lower()
+        swap, direction_text = tile_direction(section, e, room)
         tiles[section] = {
             "img": img, "color": color, "finish": e.get("FINISH", ""),
-            "tile": parse_tile_size(e.get("TILE_SIZE"), default_size),
-            "pattern": e.get("PATTERN") or "offset",
+            "tile": tuple(sorted(parse_tile_size(e.get("TILE_SIZE"), default_size), reverse=True)),
+            "pattern": normalize_pattern(e.get("PATTERN")),
+            "swap": swap, "direction_text": direction_text,
             "grout": parse_color(e.get("GROUT"), (220, 216, 210)),
             "height": None if height in ("full", "ceiling") else (to_inches(height) or 0),
         }
@@ -116,6 +134,11 @@ def main():
         sys.exit(f"No {path.name}. Start one with:  python build.py --new primary_bath_10x12\n"
                  f"Layouts:  python build.py --templates")
 
+    build_project(path, Path(args.out), no_ai=args.no_ai)
+
+
+def build_project(path, out_dir, no_ai=False):
+    """Build the PDF sheet set for a project file. Returns (pdf path, rendering image paths)."""
     cfg = read_project(path)
     room_cfg, proj, settings = cfg.get("ROOM", {}), cfg.get("PROJECT", {}), cfg.get("SETTINGS", {})
     room = Room(to_inches(room_cfg.get("WIDTH")) or 60, to_inches(room_cfg.get("LENGTH")) or 96,
@@ -125,7 +148,7 @@ def main():
 
     print("Reading products...")
     items = load_items(cfg)
-    tiles = load_tiles(cfg)
+    tiles = load_tiles(cfg, room)
     placed = place_items(cfg, items, room, settings)
     notes = check_layout(room, placed)
     for n in notes:
@@ -143,8 +166,8 @@ def main():
     meta = {"company": proj.get("COMPANY") or "Aggregate Construction Group", "client": proj.get("CLIENT"),
             "project": proj.get("PROJECT"), "room": proj.get("ROOM_NAME"), "date": today()}
     logo = proj.get("LOGO")
-    if logo and not Path(logo).is_absolute():
-        logo = str(path.parent / logo)
+    if logo and not Path(logo).is_absolute():          # next to the project file, else this folder
+        logo = str(path.parent / logo) if (path.parent / logo).exists() else str(HERE / logo)
     sheets = SheetSet(meta, logo)
     area = drawing_area()
 
@@ -157,7 +180,7 @@ def main():
     plan_ppi, plan_scale = pick_scale([lambda ppi: plan_extent(room, ppi)], split(area, 2)[0])
     plan_line = draw_plan(room, placed, tiles, colors, "line", plan_ppi, fnt)
     plan_color = draw_plan(room, placed, tiles, colors, "color", plan_ppi, fnt)
-    if args.no_ai:
+    if no_ai:
         print("  AI renderings skipped (--no-ai).")
     elif not key:
         print("  AI renderings skipped: no GEMINI_API_KEY (see README).")
@@ -193,7 +216,6 @@ def main():
         counts[p.item.section] = counts.get(p.item.section, 0) + 1
     sheets.schedule([(items[s], n) for s, n in counts.items()], notes)
 
-    out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = re.sub(r"[^A-Za-z0-9]+", "_", f"{meta['client'] or ''} {meta['room'] or 'bathroom'}").strip("_")
     pdf = out_dir / f"{stem}.pdf"
@@ -202,6 +224,8 @@ def main():
     for i, (_, img) in enumerate(ai_images, 1):
         img.save(out_dir / f"{stem}_ai_{i}.png")
     print(f"\nSaved {pdf}  ({len(sheets.pages)} sheets)")
+    return pdf, [out_dir / f"{stem}_rendering.png"] + [out_dir / f"{stem}_ai_{i}.png"
+                                                        for i in range(1, len(ai_images) + 1)]
 
 
 if __name__ == "__main__":

@@ -14,8 +14,8 @@ import numpy as np
 import requests
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
-from drawings import (COUNTER, GLASS, GLASS_LINE, PORCELAIN, draw_elevation, finish_color,
-                      rgba, shade, tile_texture)
+from drawings import COUNTER, GLASS, GLASS_LINE, PORCELAIN, draw_elevation, finish_color, rgba, shade
+from tiles import tile_texture
 from products import fmt_dim
 
 RENDER_SIZE = (2400, 1500)
@@ -74,7 +74,8 @@ def composite_render(room, placed, tiles, colors, back_wall, fnt):
 
     # floor, laid out in the back wall's frame
     ft = tiles.get("FLOOR_TILE")
-    floor = tile_texture(ft, Lb, D, ppi, seed=7) if ft else Image.new("RGBA", (10, 10), (200, 192, 180, 255))
+    # (the floor is laid out in plan x/y; turn it when looking at an east or west wall)
+    floor = tile_texture(ft, Lb, D, ppi, seed=7, swap_extra=back_wall in ("E", "W")) if ft else Image.new("RGBA", (10, 10), (200, 192, 180, 255))
     warp(canvas, floor, [cam(0, 0, 0), cam(Lb, 0, 0), cam(Lb, 0, D), cam(0, 0, D)])
 
     # side walls: their flat elevations (tile, doors, windows, mirrors) in perspective
@@ -290,7 +291,8 @@ def describe_room(room, placed, tiles, colors):
         if spec:
             name = spec.get("finish") or "tile"
             lines.append(f"- {key.replace('_', ' ').title()}: {name}, {spec['tile'][0]:g}x{spec['tile'][1]:g} in, "
-                         f"{spec.get('pattern', 'offset')} pattern, color {'#%02X%02X%02X' % spec['color']}.")
+                         f"{spec['pattern']} pattern, long side {spec['direction_text']}, "
+                         f"color {'#%02X%02X%02X' % spec['color']}.")
     return "\n".join(lines)
 
 

@@ -31,7 +31,7 @@ FIXTURES = {
     "DOOR":          ("door", 30, 80, 2),
     "WINDOW":        ("window", 30, 36, 4),
 }
-TILES = {"WALL_TILE": "12x3", "SHOWER_TILE": "12x3", "FLOOR_TILE": "24x12"}
+TILES = {"WALL_TILE": "3x12", "SHOWER_TILE": "3x12", "FLOOR_TILE": "12x24"}
 FREESTANDING_TUB = (66, 23, 32)
 
 SECTION_HELP = {
@@ -52,9 +52,12 @@ SECTION_HELP = {
     "DOOR": "SWING = left or right (hinge side, standing in the room facing the door).",
     "WINDOW": "OFF_FLOOR = sill height.",
     "WALL_TILE": "HEIGHT = tile height on the walls (0 = paint only, full = to ceiling).\n"
-                 "TILE_SIZE = width x height as installed (12x3 = horizontal subway). PATTERN = stack or offset. GROUT = color.",
-    "SHOWER_TILE": "Tile inside the shower / tub surround. HEIGHT: inches or full.",
-    "FLOOR_TILE": "",
+                 "TILE_SIZE = e.g. 3x12. DIRECTION = horizontal or vertical (which way the long side runs).\n"
+                 "PATTERN = stack, offset 1/2, offset 1/3, offset 1/4, herringbone, double herringbone,\n"
+                 "          chevron, basketweave, diagonal stack, diagonal offset.   GROUT = color.",
+    "SHOWER_TILE": "Tile inside the shower / tub surround. HEIGHT: inches or full. Same options as WALL_TILE.",
+    "FLOOR_TILE": "DIRECTION = along room length, across room width, east-west, or north-south\n"
+                  "(which way the long side of the tile runs). PATTERN: same options as WALL_TILE.",
     "SETTINGS": "RENDER_WALL = which wall the rendering looks at (blank = the vanity wall).\n"
                 "GEMINI_API_KEY = key for the AI renderings (or set the GEMINI_API_KEY\n"
                 "environment variable). Blank = skip the AI sheets.",
@@ -69,7 +72,7 @@ EXTRA_FIELDS = {
     "CEILING_LIGHT": ["X", "Y"],
 }
 NO_POSITION = {"FAUCET", "MIRROR", "SCONCES", "VANITY_LIGHT", "CEILING_LIGHT"}
-TILE_FIELDS = ["URL", "FINISH", "COLOR", "TILE_SIZE", "HEIGHT", "PATTERN", "GROUT"]
+TILE_FIELDS = ["URL", "FINISH", "COLOR", "TILE_SIZE", "HEIGHT", "PATTERN", "DIRECTION", "GROUT"]
 PROJECT_FIELDS = ["COMPANY", "LOGO", "CLIENT", "PROJECT", "ROOM_NAME", "TEMPLATE"]
 SIZE_FIELDS = ("WIDTH", "HEIGHT", "DEPTH")
 FIXED_SIZE = {"DOOR", "WINDOW"}          # sizes here are the opening, not a product
@@ -85,11 +88,14 @@ COMMON = {
     "SCONCES": {"INCLUDE": "yes"},
     "VANITY_LIGHT": {"INCLUDE": "no"},
     "CEILING_LIGHT": {"INCLUDE": "yes"},
-    "WALL_TILE": {"HEIGHT": "0", "TILE_SIZE": "12x3", "PATTERN": "offset", "GROUT": "#E6E3DE",
+    "WALL_TILE": {"HEIGHT": "0", "TILE_SIZE": "3x12", "PATTERN": "offset 1/2", "DIRECTION": "horizontal",
+                  "GROUT": "#E6E3DE",
                   "COLOR": "#F4F2EE"},
-    "SHOWER_TILE": {"HEIGHT": "full", "TILE_SIZE": "12x3", "PATTERN": "offset", "GROUT": "#E6E3DE",
+    "SHOWER_TILE": {"HEIGHT": "full", "TILE_SIZE": "3x12", "PATTERN": "offset 1/2", "DIRECTION": "horizontal",
+                    "GROUT": "#E6E3DE",
                     "COLOR": "#EDEBE7"},
-    "FLOOR_TILE": {"TILE_SIZE": "24x12", "PATTERN": "offset", "GROUT": "#BDB6AC", "COLOR": "#CFC8BD"},
+    "FLOOR_TILE": {"TILE_SIZE": "12x24", "PATTERN": "offset 1/3", "DIRECTION": "along room length",
+                   "GROUT": "#BDB6AC", "COLOR": "#CFC8BD"},
     "SETTINGS": {"MIRROR_GAP": "6", "RENDER_WALL": "", "GEMINI_API_KEY": "",
                  "GEMINI_MODEL": "gemini-2.5-flash-image"},
 }
@@ -137,7 +143,8 @@ TEMPLATES = {
                    "OFF_FLOOR": "42"},
         "CEILING_LIGHT": {"X": "60", "Y": "72"},
         "WALL_TILE": {"HEIGHT": "0"},
-        "FLOOR_TILE": {"TILE_SIZE": "48x24"},
+        "SHOWER_TILE": {"TILE_SIZE": "24x48", "PATTERN": "stack", "DIRECTION": "vertical"},
+        "FLOOR_TILE": {"TILE_SIZE": "24x48", "PATTERN": "stack"},
     },
     "powder_room_5x6": {
         "about": "5' x 6' powder room: vanity and toilet, no tub or shower.",
@@ -152,7 +159,7 @@ TEMPLATES = {
         "DOOR": {"INCLUDE": "yes", "WALL": "S", "POSITION": "42", "SWING": "right"},
         "WINDOW": {"INCLUDE": "no"},
         "CEILING_LIGHT": {"X": "30", "Y": "30"},
-        "WALL_TILE": {"HEIGHT": "full", "TILE_SIZE": "8x2"},
+        "WALL_TILE": {"HEIGHT": "full", "TILE_SIZE": "2x8", "PATTERN": "herringbone"},
     },
 }
 
@@ -176,7 +183,7 @@ def section_fields(section):
     if section == "SETTINGS":
         return SETTINGS_FIELDS
     if section in TILES:
-        return TILE_FIELDS
+        return [f for f in TILE_FIELDS if not (section == "FLOOR_TILE" and f == "HEIGHT")]
     fields = [f for f in FIXTURE_FIELDS if not (section in NO_POSITION and f in ("WALL", "POSITION"))]
     return fields + EXTRA_FIELDS.get(section, [])
 
@@ -217,7 +224,13 @@ def template_size(template, section):
 def write_project(path, template):
     values = template_values(template)
     values["PROJECT"]["TEMPLATE"] = template
-    out = [HEADER.format(template=template, about=TEMPLATES[template]["about"], filename=path.name)]
+    write_values(path, values, template, template_hints=True)
+
+
+def write_values(path, values, template, template_hints=False):
+    """Write a project file. template_hints: show template sizes as fallback comments."""
+    about = TEMPLATES.get(template, {}).get("about", "")
+    out = [HEADER.format(template=template or "custom", about=about, filename=path.name)]
     for section, fields in values.items():
         out.append(f"\n[{section}]")
         help_text = SECTION_HELP.get(section, "")
@@ -227,7 +240,7 @@ def write_project(path, template):
         pad = max(len(n) for n in names)
         for name in names:
             value = fields.get(name, "")
-            if name in SIZE_FIELDS and section in FIXTURES and section not in FIXED_SIZE and value:
+            if template_hints and name in SIZE_FIELDS and section in FIXTURES and section not in FIXED_SIZE and value:
                 # a template size is only a fallback: the product's real size should win
                 out.append(f"{name.ljust(pad)} =          # blank = from website, else {value}")
                 continue

@@ -4,13 +4,12 @@
 """
 
 import math
-import random
 
-import numpy as np
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 
 from products import fmt_dim
 from project import FLOOR_KINDS, WALL_THICKNESS
+from tiles import tile_lines, tile_texture
 
 INK = (35, 33, 30, 255)
 SOFT_INK = (120, 116, 110, 255)
@@ -144,60 +143,7 @@ def vdim(img, draw, x, y1, y2, label, font, ext_from=None, color=INK):
         text_rotated(img, (x - (b[3] - b[1]) / 2 - 7, (y1 + y2) / 2), label, font, color)
 
 
-# ---------------------------------------------------------------- tile & photos
-
-def tile_texture(spec, w_in, h_in, ppi, seed=1):
-    """Tiled surface of w_in x h_in inches. spec: color, img, tile (w, h), pattern, grout."""
-    W, H = max(1, round(w_in * ppi)), max(1, round(h_in * ppi))
-    tw, th = spec["tile"]
-    tpx, tpy = max(2, round(tw * ppi)), max(2, round(th * ppi))
-    g = max(1, round(ppi * 0.125))
-    base = spec["color"]
-    face = Image.new("RGB", (tpx, tpy), base)
-    if spec.get("img") is not None:
-        photo = spec["img"].convert("RGB")
-        pw, ph = photo.size
-        aspect = tw / th
-        cw = min(pw * 0.6, ph * 0.6 * aspect)
-        ch = cw / aspect
-        crop = photo.crop((int((pw - cw) / 2), int((ph - ch) / 2), int((pw + cw) / 2), int((ph + ch) / 2)))
-        face = Image.blend(crop.resize((tpx, tpy)), face, 0.45)
-    rng = random.Random(seed)
-    arr = np.asarray(face, dtype=float)
-    variants = [Image.fromarray(np.clip(arr * rng.uniform(0.965, 1.035), 0, 255).astype(np.uint8))
-                for _ in range(5)]
-    out = Image.new("RGB", (W, H), spec["grout"])
-    offset = spec.get("pattern", "offset").lower().startswith("off") and tw != th
-    row = 0
-    for y in range(0, H + tpy, tpy):
-        shift = (tpx // 2) if offset and row % 2 else 0
-        for x in range(-shift, W + tpx, tpx):
-            out.paste(rng.choice(variants).crop((0, 0, tpx - g, tpy - g)), (x + g // 2, y + g // 2))
-        row += 1
-    return out.convert("RGBA")
-
-
-def tile_grid(draw, box, spec, ppi, color=GRID):
-    """Tile joint lines inside pixel box (x0, y0 top, x1, y1 bottom), laid from the bottom-left."""
-    x0, y0, x1, y1 = box
-    tw, th = spec["tile"]
-    tpx, tpy = tw * ppi, th * ppi
-    if tpx < 3 or tpy < 3:
-        return
-    offset = spec.get("pattern", "offset").lower().startswith("off") and tw != th
-    row, y = 0, y1
-    while y > y0 + 0.5:
-        ytop = max(y0, y - tpy)
-        draw.line([x0, ytop, x1, ytop], fill=color, width=1)
-        shift = tpx / 2 if offset and row % 2 else 0
-        x = x0 + shift
-        while x < x1:
-            if x > x0:
-                draw.line([x, ytop, x, y], fill=color, width=1)
-            x += tpx
-        y -= tpy
-        row += 1
-
+# ---------------------------------------------------------------- photos
 
 def photo_width(item):
     """Width to draw the photo at: listed width, unless that would stretch the photo >15%."""
@@ -486,10 +432,10 @@ def draw_elevation(room, wall, placed, tiles, colors, style, ppi, fnt=None, dims
     for u0, u1, top, spec in zones:
         box = [X(u0), Y(top), X(u1), Y(0)]
         if color:
-            tex = tile_texture(spec, u1 - u0, top, ppi, seed=hash((wall, u0)) % 1000)
+            tex = tile_texture(spec, u1 - u0, top, ppi, seed=hash((wall, u0)) % 1000, from_bottom=True)
             img.paste(tex, (round(box[0]), round(box[1])))
         else:
-            tile_grid(draw, box, spec, ppi)
+            tile_lines(img, box, spec, ppi, GRID)
             draw.rectangle(box, outline=SOFT_INK, width=1)
 
     # --- doors & windows in this wall
@@ -638,9 +584,10 @@ def draw_plan(room, placed, tiles, colors, style, ppi, fnt, dims=True):
     ft = tiles.get("FLOOR_TILE")
     if color and ft:
         img.paste(tile_texture(ft, room.width, room.length, ppi, seed=7), (round(room_box[0]), round(room_box[1])))
+        tile_lines(img, room_box, ft, ppi, (110, 102, 92, 120), from_bottom=False)   # joints readable at scale
     elif ft:
-        grid = ImageDraw.Draw(img)
-        tile_grid(grid, room_box, ft, ppi, color=(228, 224, 218, 255))
+        tile_lines(img, room_box, ft, ppi, (200, 195, 188, 255), from_bottom=False)
+        draw = ImageDraw.Draw(img)
 
     # soft shadows under fixtures (color)
     if color:
@@ -747,7 +694,7 @@ def plan_symbol(img, draw, room, p, P, style, ppi, lw, tiles):
         box = R(0, 0, w, d)
         spec = tiles.get("SHOWER_TILE") or tiles.get("FLOOR_TILE")
         if color and spec:
-            floor_spec = dict(spec, tile=(2, 2), pattern="stack")
+            floor_spec = dict(spec, tile=(2, 2), pattern="stack", img=None)
             tex = tile_texture(floor_spec, (box[2] - box[0]) / ppi, (box[3] - box[1]) / ppi, ppi, seed=3)
             img.paste(tex, (round(box[0]), round(box[1])))
         else:

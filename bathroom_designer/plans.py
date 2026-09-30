@@ -10,12 +10,10 @@ import base64
 import json
 import re
 
-import requests
-
+from gemini import generate, get_key, save_key
 from project import Room
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.8-flash"     # swapped automatically if Google retires it
 MAX_BYTES = 18 * 1024 * 1024          # inline upload limit (~20 MB per request)
 KINDS = ["vanity", "toilet", "tub", "shower", "door", "window"]
 
@@ -59,11 +57,8 @@ def call_gemini(data, mime, key, model, room_hint=""):
         ]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
     }
-    resp = requests.post(GEMINI_URL.format(model=model), json=body, timeout=180,
-                         headers={"x-goog-api-key": key, "Content-Type": "application/json"})
-    if resp.status_code != 200:
-        raise RuntimeError(f"Gemini returned {resp.status_code}: {resp.text[:300]}")
-    parts = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
+    result = generate(body, key, model, "text", timeout=180)
+    parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
     text = "".join(p.get("text", "") for p in parts)
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
@@ -180,11 +175,13 @@ def nearest_gap(room, wall, box):
 
 
 def read_plan(data, mime, key, model=None, room_hint=""):
+    key = get_key(key)
     if not key:
         raise RuntimeError("Reading plans needs a Gemini API key (Settings > Gemini API key, "
                            "or the GEMINI_API_KEY environment variable).")
     if len(data) > MAX_BYTES:
         raise RuntimeError("That file is over 18 MB. Export just the bathroom page, or a smaller image.")
     ext = call_gemini(data, mime, key, model or DEFAULT_MODEL, room_hint)
+    save_key(key)                      # worked - remember it so it only has to be pasted once
     values, notes = to_values(ext)
     return {"values": values, "notes": notes, "raw": ext}

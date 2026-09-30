@@ -1,3 +1,5 @@
 output/
 projects/
 __pycache__/
+.venv/
+.gemini_key

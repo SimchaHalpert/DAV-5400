@@ -26,7 +26,6 @@ from project import (FIXED_SIZE, FIXTURES, SECTION_HELP, SIZE_FIELDS, TEMPLATES,
                      place_items, read_project, section_fields, template_values, write_values)
 from plans import read_plan
 from tiles import FLOOR_DIRECTIONS, PATTERNS, WALL_DIRECTIONS
-import os
 
 HERE = Path(__file__).resolve().parent
 PROJECTS = HERE / "projects"
@@ -191,7 +190,7 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/api/preview":
                 return self.send(200, preview(data["values"]))
             if url.path == "/api/plan":
-                key = data.get("key") or os.environ.get("GEMINI_API_KEY", "")
+                key = data.get("key", "")
                 result = read_plan(base64.b64decode(data["file"]), data.get("mime") or "application/pdf", key,
                                    room_hint=data.get("room", ""))
                 return self.send(200, result)

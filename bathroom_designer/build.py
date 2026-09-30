@@ -7,7 +7,6 @@
 """
 
 import argparse
-import os
 import re
 import sys
 from pathlib import Path
@@ -18,6 +17,7 @@ from products import dominant_color, get_product, real_size, remove_background, 
 from project import (FIXTURES, FREESTANDING_TUB, TEMPLATES, TILES, TOILET_TYPES, WALL_NAMES, WALLS, Item, Room,
                      check_layout, included, parse_tile_size, place_items, read_project, template_size,
                      write_project)
+from gemini import get_key
 from render import ai_renders, composite_render
 from tiles import normalize_pattern
 from sheets import SheetSet, drawing_area, pick_scale, split, today
@@ -185,7 +185,7 @@ def build_project(path, out_dir, no_ai=False):
                  "Built from the selected product photos. Not to scale.", fit=True)
 
     ai_images = []
-    key = settings.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    key = get_key(settings.get("GEMINI_API_KEY"))
     plan_ppi, plan_scale = pick_scale([lambda ppi: plan_extent(room, ppi)], split(area, 2)[0])
     plan_line = draw_plan(room, placed, tiles, colors, "line", plan_ppi, fnt)
     plan_color = draw_plan(room, placed, tiles, colors, "color", plan_ppi, fnt)

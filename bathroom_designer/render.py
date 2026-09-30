@@ -11,11 +11,11 @@ import io
 import math
 
 import numpy as np
-import requests
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from drawings import COUNTER, GLASS, GLASS_LINE, PORCELAIN, draw_elevation, finish_color, rgba, shade
 from tiles import tile_texture
+from gemini import generate
 from products import fmt_dim
 
 RENDER_SIZE = (2400, 1500)
@@ -247,7 +247,6 @@ def block(d, cam, us, vs, zs, color, on_left):
 
 # ---------------------------------------------------------------- Gemini
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
 def png_b64(img, max_side=1024):
@@ -264,11 +263,8 @@ def gemini_image(prompt, images, key, model, aspect="16:9"):
     body = {"contents": [{"parts": parts}],
             "generationConfig": {"responseModalities": ["TEXT", "IMAGE"],
                                  "imageConfig": {"aspectRatio": aspect}}}
-    resp = requests.post(GEMINI_URL.format(model=model), json=body, timeout=300,
-                         headers={"x-goog-api-key": key, "Content-Type": "application/json"})
-    if resp.status_code != 200:
-        raise RuntimeError(f"Gemini returned {resp.status_code}: {resp.text[:300]}")
-    for cand in resp.json().get("candidates", []):
+    result = generate(body, key, model, "image")
+    for cand in result.get("candidates", []):
         for part in cand.get("content", {}).get("parts", []):
             data = part.get("inlineData") or part.get("inline_data")
             if data and data.get("data"):

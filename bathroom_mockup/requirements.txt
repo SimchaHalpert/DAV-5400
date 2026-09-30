@@ -1,0 +1,6 @@
+requests
+beautifulsoup4
+pillow
+numpy
+# Optional, gives much cleaner background removal (large download):
+# rembg[cpu]

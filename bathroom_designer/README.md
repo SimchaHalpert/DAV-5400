@@ -61,9 +61,18 @@ image model. Each build makes 2 images (usually a few cents to ~$0.30 total, dep
 AI images are for design intent. They may not match products exactly, so the product-photo
 rendering and drawings are the reference.
 
+## Toilet and accessories
+- Toilet `TYPE`: one-piece, two-piece, or wall-hung. Wall-hung shows the flush plate and in-wall
+  carrier in the elevations and a tankless plan symbol.
+- TP holder, towel bars, towel rings, robe hooks: each has a link, finish, wall, position, and height
+  (`OFF_FLOOR`, blank = standard: TP 26", towel bar 48", ring 54", hook 66" to center).
+  The TP holder goes next to the toilet automatically if its wall/position are blank.
+- There's a second towel bar / ring / hook. Leave its link blank to use the same product as the first.
+
 ## What the checks look at
 Toilet centerline at least 15" from walls/fixtures and 21" clear in front, vanity 21" clear in front,
-sink centerline 15" from side walls, 30"x30" minimum shower, fixtures overlapping or running past walls.
+sink centerline 15" from side walls, 30"x30" minimum shower, fixtures overlapping or running past walls,
+accessories placed inside a shower or tub area.
 Warnings print in the terminal and on the schedule sheet in red.
 
 ## Tips

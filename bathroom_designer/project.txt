@@ -98,6 +98,7 @@ DEPTH     =
 OFF_FLOOR = 
 
 [TOILET]
+# TYPE = one-piece, two-piece, or wall-hung.
 INCLUDE   = yes
 URL       = 
 FINISH    = 
@@ -107,6 +108,7 @@ DEPTH     =
 WALL      = W
 POSITION  = 84
 OFF_FLOOR = 
+TYPE      = wall-hung
 
 [TUB]
 # TYPE = alcove or freestanding. OFF_WALL = gap to the wall (freestanding).
@@ -182,6 +184,90 @@ DEPTH     =
 WALL      = E
 POSITION  = 90
 OFF_FLOOR = 42
+
+[TP_HOLDER]
+# Toilet paper holder. WALL / POSITION blank = next to the toilet. Default 26" high (center).
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+WALL      = 
+POSITION  = 
+OFF_FLOOR = 
+
+[TOWEL_BAR]
+# OFF_FLOOR blank = bar centered at 48".
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+WALL      = S
+POSITION  = 20
+OFF_FLOOR = 
+
+[TOWEL_BAR_2]
+# Second towel bar. Product link blank = same product as TOWEL_BAR.
+INCLUDE   = no
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+WALL      = 
+POSITION  = 
+OFF_FLOOR = 
+
+[TOWEL_RING]
+# OFF_FLOOR blank = centered at 54".
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+WALL      = W
+POSITION  = 128
+OFF_FLOOR = 
+
+[TOWEL_RING_2]
+# Second towel ring. Product link blank = same product as TOWEL_RING.
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+WALL      = E
+POSITION  = 16
+OFF_FLOOR = 
+
+[ROBE_HOOK]
+# OFF_FLOOR blank = centered at 66".
+INCLUDE   = yes
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+WALL      = S
+POSITION  = 38
+OFF_FLOOR = 
+
+[ROBE_HOOK_2]
+# Second robe hook. Product link blank = same product as ROBE_HOOK.
+INCLUDE   = no
+URL       = 
+FINISH    = 
+WIDTH     = 
+HEIGHT    = 
+DEPTH     = 
+WALL      = 
+POSITION  = 
+OFF_FLOOR = 
 
 [WALL_TILE]
 # HEIGHT = tile height on the walls (0 = paint only, full = to ceiling).

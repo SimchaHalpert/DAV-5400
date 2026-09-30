@@ -168,7 +168,8 @@ class SheetSet:
                 page.paste(thumb, (X[0] + 6, y + (row_h - thumb.height) // 2))
             size = f"{fmt_dim(it.w)} x {fmt_dim(it.d)} x {fmt_dim(it.h)}"
             source = urlparse(it.url).netloc.replace("www.", "") if it.url else "not selected"
-            values = [it.label, it.name or "-", it.finish or "-", size, str(qty), source]
+            label = it.label + (f" ({it.extra['type']})" if it.extra.get("type") else "")
+            values = [label, it.name or "-", it.finish or "-", size, str(qty), source]
             for v, x, (_, w) in zip(values, X[1:], cols[1:]):
                 lines = wrap(v, self.f["small"], px(w) - 16)[:2]
                 for i, line in enumerate(lines):

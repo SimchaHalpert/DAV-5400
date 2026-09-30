@@ -15,7 +15,7 @@ from pathlib import Path
 from drawings import (draw_elevation, draw_plan, elevation_extent, finish_color, fonts,
                       parse_color, plan_extent)
 from products import dominant_color, get_product, real_size, remove_background, to_inches
-from project import (FIXTURES, FREESTANDING_TUB, TEMPLATES, TILES, WALL_NAMES, WALLS, Item, Room,
+from project import (FIXTURES, FREESTANDING_TUB, TEMPLATES, TILES, TOILET_TYPES, WALL_NAMES, WALLS, Item, Room,
                      check_layout, included, parse_tile_size, place_items, read_project, template_size,
                      write_project)
 from render import ai_renders, composite_render
@@ -42,6 +42,15 @@ def load_items(cfg, fetch=True):
         default = (t.get("WIDTH", default[0]), t.get("HEIGHT", default[1]), t.get("DEPTH", default[2]))
         if section == "DOOR":
             extra["swing"] = (entry.get("SWING") or "right").lower()
+        if section == "TOILET":
+            extra["type"] = (entry.get("TYPE") or "one-piece").lower()
+            if extra["type"] in TOILET_TYPES and not t:
+                default = TOILET_TYPES[extra["type"]]
+        base = section[:-2] if section.endswith("_2") else None
+        if base and not entry.get("URL") and base in items:
+            items[section] = items[base]          # second one of the same product
+            print(f"  {section:<13} same product as {base}")
+            continue
         url, finish = entry.get("URL", ""), entry.get("FINISH", "")
         img, scraped, name = None, {}, ""
         if url and fetch:

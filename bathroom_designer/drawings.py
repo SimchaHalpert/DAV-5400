@@ -262,6 +262,22 @@ def front_symbol(img, p, box, style, ppi, colors):
             draw.rounded_rectangle([cx - 2.5 * inch, y0 + 2 * inch, cx + 2.5 * inch, y1], radius=inch,
                                    fill=(250, 244, 226, 255) if color else WHITE, outline=INK, width=lw)
 
+    elif kind == "toilet" and it.extra.get("type") == "wall-hung":
+        w = x1 - x0
+        cx = (x0 + x1) / 2
+        # flush plate at ~40" and the in-wall carrier (dashed)
+        plate_y = y1 - (40 - p.bottom) * inch
+        if not color:
+            for a, b in (((x0, y0 - 30 * inch), (x1, y0 - 30 * inch)), ((x0, y0 - 30 * inch), (x0, y1)),
+                         ((x1, y0 - 30 * inch), (x1, y1))):
+                dashed(draw, a, b, SOFT_INK)
+        draw.rounded_rectangle([cx - 4.5 * inch, plate_y - 3 * inch, cx + 4.5 * inch, plate_y + 3 * inch],
+                               radius=0.5 * inch, fill=metal(it) if color else WHITE, outline=INK, width=lw)
+        draw.line([cx, plate_y - 3 * inch, cx, plate_y + 3 * inch], fill=INK, width=1)
+        draw.rounded_rectangle([x0, y0, x1, y0 + 1.5 * inch], radius=0.6 * inch, fill=white, outline=INK, width=lw)
+        draw.polygon([(x0 + w * 0.04, y0 + 1.5 * inch), (x1 - w * 0.04, y0 + 1.5 * inch),
+                      (cx + w * 0.3, y1), (cx - w * 0.3, y1)], fill=white, outline=INK)
+
     elif kind == "toilet":
         w = x1 - x0
         cx = (x0 + x1) / 2
@@ -273,6 +289,49 @@ def front_symbol(img, p, box, style, ppi, colors):
                                fill=white, outline=INK, width=lw)
         draw.polygon([(x0 + w * 0.08, seat + 1.5 * inch), (x1 - w * 0.08, seat + 1.5 * inch),
                       (cx + w * 0.24, y1), (cx - w * 0.24, y1)], fill=white, outline=INK)
+        if it.extra.get("type") == "two-piece":         # separate tank sits on the bowl
+            draw.line([x0 + w * 0.12, tank_bottom + 0.8 * inch, x1 - w * 0.12, tank_bottom + 0.8 * inch],
+                      fill=INK, width=lw)
+            draw.ellipse([x1 - w * 0.25, y0 + 2 * inch, x1 - w * 0.12, y0 + 3.2 * inch], fill=metal(it), outline=INK)
+
+    elif kind == "towel_bar":
+        m = metal(it) if color else WHITE
+        post = 1.2 * inch
+        if color:                                      # a folded towel hanging on the bar
+            tw = (x1 - x0) * 0.72
+            cx = (x0 + x1) / 2
+            draw.rectangle([cx - tw / 2, y0 + 0.8 * inch, cx + tw / 2, y0 + 20 * inch], fill=TOWEL, outline=(205, 200, 190))
+            draw.line([cx - tw / 2, y0 + 17 * inch, cx + tw / 2, y0 + 17 * inch], fill=(215, 210, 200), width=lw)
+        for px in (x0, x1 - post):
+            draw.rectangle([px, y0, px + post, y1], fill=m, outline=INK, width=lw)
+        draw.rectangle([x0 + post, y0 + 0.6 * inch, x1 - post, y0 + 1.3 * inch], fill=m, outline=INK, width=1)
+
+    elif kind == "towel_ring":
+        m = metal(it) if color else WHITE
+        cx = (x0 + x1) / 2
+        draw.rectangle([cx - 1 * inch, y0, cx + 1 * inch, y0 + 2 * inch], fill=m, outline=INK, width=lw)
+        r = (x1 - x0) / 2
+        if color:
+            draw.polygon([(cx - r * 0.6, y1 - r * 0.2), (cx + r * 0.6, y1 - r * 0.2),
+                          (cx + r * 0.8, y1 + 10 * inch), (cx - r * 0.8, y1 + 10 * inch)], fill=TOWEL, outline=(205, 200, 190))
+        draw.ellipse([cx - r, y1 - 2 * r, cx + r, y1], outline=m if color else INK, width=max(lw, round(0.5 * inch)))
+        if color:
+            draw.ellipse([cx - r, y1 - 2 * r, cx + r, y1], outline=INK, width=1)
+
+    elif kind == "robe_hook":
+        m = metal(it) if color else WHITE
+        cx = (x0 + x1) / 2
+        draw.ellipse([cx - (x1 - x0) / 2, y0, cx + (x1 - x0) / 2, y0 + (x1 - x0)], fill=m, outline=INK, width=lw)
+        draw.line([cx, y0 + (x1 - x0) / 2, cx, y1 - 0.5 * inch], fill=INK if not color else m, width=max(lw, round(0.5 * inch)))
+        draw.ellipse([cx - 0.5 * inch, y1 - 1 * inch, cx + 0.5 * inch, y1], fill=m, outline=INK)
+
+    elif kind == "tp_holder":
+        m = metal(it) if color else WHITE
+        cx = (x0 + x1) / 2
+        draw.rectangle([x0, y0, x0 + 1.2 * inch, y1], fill=m, outline=INK, width=lw)
+        draw.rectangle([x0 + 1.2 * inch, y0 + 0.9 * inch, x1, y0 + 1.6 * inch], fill=m, outline=INK, width=1)
+        draw.ellipse([x0 + 1.4 * inch, y0 - 1.2 * inch, x1 - 0.2 * inch, y1 + 1.2 * inch],
+                     fill=(252, 252, 250, 255) if color else WHITE, outline=INK, width=lw)
 
     elif kind == "tub":
         if it.extra.get("type") == "freestanding":
@@ -360,6 +419,9 @@ def side_symbol(draw, p, box, wall_at_left, style, ppi):
         draw.rectangle([kx[0], y1 - 4 * inch, kx[1], y1], fill=shade(body, 0.7), outline=INK, width=lw)
         draw.rectangle([x0 - 0.5 * inch, y0, x1 + 0.5 * inch, y0 + 1.5 * inch], fill=COUNTER if color else WHITE,
                        outline=INK, width=lw)
+    elif kind == "toilet" and it.extra.get("type") == "wall-hung":
+        bx = near(0, it.d)
+        draw.rounded_rectangle([bx[0], y0, bx[1], y1], radius=4 * inch, fill=white, outline=INK, width=lw)
     elif kind == "toilet":
         tx = near(0, 9)
         draw.rounded_rectangle([tx[0], y0, tx[1], y0 + 15 * inch], radius=inch, fill=white, outline=INK, width=lw)
@@ -385,7 +447,9 @@ def plan_rect_on_wall(room, p, wall):
 # ---------------------------------------------------------------- elevation
 
 ELEV_MARGINS = {"left": 1.05, "right": 0.45, "top": 0.1, "bottom": 0.6}   # paper inches, with dimensions
-FRONT_ORDER = ["tub", "vanity", "toilet", "mirror", "vanity_light", "sconce", "faucet", "shower_trim", "shower"]
+FRONT_ORDER = ["tub", "vanity", "toilet", "mirror", "vanity_light", "sconce", "tp_holder", "towel_bar",
+               "towel_ring", "robe_hook", "faucet", "shower_trim", "shower"]
+TOWEL = (238, 234, 226, 255)
 
 
 def paper_margins(ppi):
@@ -500,7 +564,8 @@ def elevation_dims(img, draw, room, wall, placed, X, Y, fnt, ppi, tiles):
     # bottom: chain to item centerlines, then overall
     points = {0.0, Lw}
     for p in own:
-        if p.kind in ("vanity", "toilet", "tub", "shower", "door", "window", "shower_trim", "faucet"):
+        if p.kind in ("vanity", "toilet", "tub", "shower", "door", "window", "shower_trim", "faucet",
+                      "towel_bar", "towel_ring", "robe_hook", "tp_holder"):
             points.add(round(p.u, 2))
     pts = sorted(points)
     chain_y = Y(-4) + DIM_GAP_PX
@@ -533,7 +598,13 @@ def elevation_dims(img, draw, room, wall, placed, X, Y, fnt, ppi, tiles):
         elif k == "tub":
             marks.append((p.top, "tub rim"))
         elif k == "toilet":
-            marks.append((p.top, "toilet top"))
+            if p.item.extra.get("type") == "wall-hung":
+                marks += [(p.top, "toilet rim"), (40, "flush plate CL")]
+            else:
+                marks.append((p.top, "toilet top"))
+        elif k in ("towel_bar", "towel_ring", "robe_hook", "tp_holder"):
+            marks.append((p.bottom + p.item.h / 2, {"towel_bar": "towel bar CL", "towel_ring": "towel ring CL",
+                                                    "robe_hook": "robe hook CL", "tp_holder": "TP holder CL"}[k]))
     wt = tiles.get("WALL_TILE")
     if wt and wt["height"] and wt["height"] < H:
         marks.append((wt["height"], "tile"))
@@ -675,9 +746,17 @@ def plan_symbol(img, draw, room, p, P, style, ppi, lw, tiles):
             draw.ellipse(R(a - 0.8, d / 2 + 0.2, a + 0.8, d / 2 + 1.8), outline=INK, width=1)
             draw.ellipse(R(a - 1, 1.2, a + 1, 3.2), fill=rgba(finish_color("", METAL_DEFAULT)), outline=INK)
     elif p.kind == "toilet":
-        draw.rounded_rectangle(R(w / 2 - 10, 0, w / 2 + 10, 8.5), radius=ppi, fill=white, outline=INK, width=lw)
-        draw.ellipse(R(w / 2 - 7.5, 7, w / 2 + 7.5, d), fill=white, outline=INK, width=lw)
-        draw.ellipse(R(w / 2 - 5, 10, w / 2 + 5, d - 3), outline=INK, width=1)
+        kind = it.extra.get("type", "one-piece")
+        if kind == "wall-hung":                   # tank is in the wall: just a flush plate line
+            draw.rectangle(R(w / 2 - 4.5, 0, w / 2 + 4.5, 0.8), fill=INK)
+            draw.ellipse(R(w / 2 - 7, 0, w / 2 + 7, d), fill=white, outline=INK, width=lw)
+            draw.ellipse(R(w / 2 - 4.8, 3, w / 2 + 4.8, d - 3), outline=INK, width=1)
+        else:
+            tank = 8.5 if kind == "two-piece" else 9.5
+            draw.ellipse(R(w / 2 - 7.5, tank - 2, w / 2 + 7.5, d), fill=white, outline=INK, width=lw)
+            draw.rounded_rectangle(R(w / 2 - 10, 0, w / 2 + 10, tank), radius=ppi * (1 if kind == "two-piece" else 3),
+                                   fill=white, outline=INK, width=lw)
+            draw.ellipse(R(w / 2 - 5, tank + 1.5, w / 2 + 5, d - 3), outline=INK, width=1)
     elif p.kind == "tub":
         if it.extra.get("type") == "freestanding":
             r = min(w, d) / 2 * ppi

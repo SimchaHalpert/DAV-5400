@@ -30,7 +30,19 @@ FIXTURES = {
     "CEILING_LIGHT": ("ceiling_light", 14, 8, 14),
     "DOOR":          ("door", 30, 80, 2),
     "WINDOW":        ("window", 30, 36, 4),
+    "TP_HOLDER":     ("tp_holder", 7, 3.5, 4),
+    "TOWEL_BAR":     ("towel_bar", 24, 3, 3.5),
+    "TOWEL_BAR_2":   ("towel_bar", 24, 3, 3.5),
+    "TOWEL_RING":    ("towel_ring", 7, 8, 3.5),
+    "TOWEL_RING_2":  ("towel_ring", 7, 8, 3.5),
+    "ROBE_HOOK":     ("robe_hook", 2, 3.5, 3),
+    "ROBE_HOOK_2":   ("robe_hook", 2, 3.5, 3),
 }
+ACCESSORIES = ["TP_HOLDER", "TOWEL_BAR", "TOWEL_BAR_2", "TOWEL_RING", "TOWEL_RING_2", "ROBE_HOOK", "ROBE_HOOK_2"]
+# standard mounting heights, inches from the floor to the CENTER of the item
+ACCESSORY_CENTER = {"tp_holder": 26, "towel_bar": 48, "towel_ring": 54, "robe_hook": 66}
+TOILET_TYPES = {"one-piece": (19, 28, 29), "two-piece": (20, 30, 30), "wall-hung": (15, 14, 22)}  # W, H, D
+WALL_HUNG_BOWL_BOTTOM = 3            # bowl sits off the floor; rim lands ~17"
 TILES = {"WALL_TILE": "3x12", "SHOWER_TILE": "3x12", "FLOOR_TILE": "12x24"}
 FREESTANDING_TUB = (66, 23, 32)
 
@@ -44,7 +56,14 @@ SECTION_HELP = {
               "OFF_FLOOR blank = MIRROR_GAP inches above the faucet (never below 40\").",
     "SCONCES": "Flank each mirror. OFF_FLOOR blank = centered at 66\".",
     "VANITY_LIGHT": "Above each mirror.",
-    "TOILET": "",
+    "TOILET": "TYPE = one-piece, two-piece, or wall-hung.",
+    "TP_HOLDER": "Toilet paper holder. WALL / POSITION blank = next to the toilet. Default 26\" high (center).",
+    "TOWEL_BAR": "OFF_FLOOR blank = bar centered at 48\".",
+    "TOWEL_BAR_2": "Second towel bar. Product link blank = same product as TOWEL_BAR.",
+    "TOWEL_RING": "OFF_FLOOR blank = centered at 54\".",
+    "TOWEL_RING_2": "Second towel ring. Product link blank = same product as TOWEL_RING.",
+    "ROBE_HOOK": "OFF_FLOOR blank = centered at 66\".",
+    "ROBE_HOOK_2": "Second robe hook. Product link blank = same product as ROBE_HOOK.",
     "TUB": "TYPE = alcove or freestanding. OFF_WALL = gap to the wall (freestanding).",
     "SHOWER": "WIDTH along the wall, DEPTH into the room. HEIGHT = glass height.",
     "SHOWER_TRIM": "Valve + shower head. OFF_FLOOR = height of the bottom of the valve.",
@@ -68,6 +87,7 @@ EXTRA_FIELDS = {
     "VANITY": ["SINKS"],
     "MIRROR": ["COUNT"],
     "TUB": ["TYPE", "OFF_WALL"],
+    "TOILET": ["TYPE"],
     "DOOR": ["SWING"],
     "CEILING_LIGHT": ["X", "Y"],
 }
@@ -88,6 +108,14 @@ COMMON = {
     "SCONCES": {"INCLUDE": "yes"},
     "VANITY_LIGHT": {"INCLUDE": "no"},
     "CEILING_LIGHT": {"INCLUDE": "yes"},
+    "TOILET": {"TYPE": "one-piece"},
+    "TP_HOLDER": {"INCLUDE": "yes"},
+    "TOWEL_BAR": {"INCLUDE": "yes"},
+    "TOWEL_BAR_2": {"INCLUDE": "no"},
+    "TOWEL_RING": {"INCLUDE": "yes"},
+    "TOWEL_RING_2": {"INCLUDE": "no"},
+    "ROBE_HOOK": {"INCLUDE": "yes"},
+    "ROBE_HOOK_2": {"INCLUDE": "no"},
     "WALL_TILE": {"HEIGHT": "0", "TILE_SIZE": "3x12", "PATTERN": "offset 1/2", "DIRECTION": "horizontal",
                   "GROUT": "#E6E3DE",
                   "COLOR": "#F4F2EE"},
@@ -112,6 +140,9 @@ TEMPLATES = {
         "SHOWER_TRIM": {"INCLUDE": "yes", "WALL": "W", "POSITION": "15", "OFF_FLOOR": "30"},
         "DOOR": {"INCLUDE": "yes", "WALL": "E", "POSITION": "24", "SWING": "right"},
         "WINDOW": {"INCLUDE": "no"},
+        "TOWEL_BAR": {"WALL": "E", "POSITION": "54", "WIDTH": "18"},
+        "TOWEL_RING": {"WALL": "N", "POSITION": "34"},
+        "ROBE_HOOK": {"WALL": "N", "POSITION": "50"},
         "CEILING_LIGHT": {"X": "30", "Y": "40"},
     },
     "shower_bath_5x8": {
@@ -125,6 +156,9 @@ TEMPLATES = {
         "SHOWER_TRIM": {"INCLUDE": "yes", "WALL": "S", "POSITION": "30", "OFF_FLOOR": "42"},
         "DOOR": {"INCLUDE": "yes", "WALL": "E", "POSITION": "24", "SWING": "right"},
         "WINDOW": {"INCLUDE": "no"},
+        "TOWEL_BAR": {"WALL": "E", "POSITION": "52", "WIDTH": "18"},
+        "TOWEL_RING": {"WALL": "N", "POSITION": "34"},
+        "ROBE_HOOK": {"WALL": "N", "POSITION": "50"},
         "CEILING_LIGHT": {"X": "30", "Y": "40"},
     },
     "primary_bath_10x12": {
@@ -134,13 +168,17 @@ TEMPLATES = {
         "ROOM": {"WIDTH": "120", "LENGTH": "144", "CEILING": "108"},
         "VANITY": {"INCLUDE": "yes", "WIDTH": "72", "WALL": "N", "POSITION": "60", "SINKS": "2"},
         "MIRROR": {"COUNT": "2"},
-        "TOILET": {"INCLUDE": "yes", "WALL": "W", "POSITION": "84"},
         "TUB": {"INCLUDE": "yes", "TYPE": "freestanding", "WALL": "E", "POSITION": "90", "OFF_WALL": "8"},
         "SHOWER": {"INCLUDE": "yes", "WALL": "W", "POSITION": "30", "WIDTH": "60", "DEPTH": "42"},
         "SHOWER_TRIM": {"INCLUDE": "yes", "WALL": "W", "POSITION": "30", "OFF_FLOOR": "42"},
         "DOOR": {"INCLUDE": "yes", "WALL": "S", "POSITION": "58", "WIDTH": "30", "SWING": "left"},
         "WINDOW": {"INCLUDE": "yes", "WALL": "E", "POSITION": "90", "WIDTH": "36", "HEIGHT": "48",
                    "OFF_FLOOR": "42"},
+        "TOILET": {"INCLUDE": "yes", "TYPE": "wall-hung", "WALL": "W", "POSITION": "84"},
+        "TOWEL_BAR": {"WALL": "S", "POSITION": "20"},
+        "TOWEL_RING": {"WALL": "W", "POSITION": "128"},
+        "TOWEL_RING_2": {"INCLUDE": "yes", "WALL": "E", "POSITION": "16"},
+        "ROBE_HOOK": {"WALL": "S", "POSITION": "38"},
         "CEILING_LIGHT": {"X": "60", "Y": "72"},
         "WALL_TILE": {"HEIGHT": "0"},
         "SHOWER_TILE": {"TILE_SIZE": "24x48", "PATTERN": "stack", "DIRECTION": "vertical"},
@@ -150,7 +188,7 @@ TEMPLATES = {
         "about": "5' x 6' powder room: vanity and toilet, no tub or shower.",
         "PROJECT": {"ROOM_NAME": "Powder Room"},
         "ROOM": {"WIDTH": "60", "LENGTH": "72"},
-        "VANITY": {"INCLUDE": "yes", "WIDTH": "24", "WALL": "N", "POSITION": "20", "SINKS": "1"},
+        "VANITY": {"INCLUDE": "yes", "WIDTH": "24", "WALL": "N", "POSITION": "18", "SINKS": "1"},
         "TOILET": {"INCLUDE": "yes", "WALL": "E", "POSITION": "38"},
         "TUB": {"INCLUDE": "no"},
         "SHOWER": {"INCLUDE": "no"},
@@ -158,6 +196,9 @@ TEMPLATES = {
         "SHOWER_TILE": {},
         "DOOR": {"INCLUDE": "yes", "WALL": "S", "POSITION": "42", "SWING": "right"},
         "WINDOW": {"INCLUDE": "no"},
+        "TOWEL_BAR": {"INCLUDE": "no"},
+        "TOWEL_RING": {"WALL": "E", "POSITION": "12"},
+        "ROBE_HOOK": {"INCLUDE": "no"},
         "CEILING_LIGHT": {"X": "30", "Y": "30"},
         "WALL_TILE": {"HEIGHT": "full", "TILE_SIZE": "2x8", "PATTERN": "herringbone"},
     },
@@ -332,7 +373,7 @@ class Item:
 
     @property
     def label(self):
-        return self.section.replace("_", " ").title()
+        return self.section.replace("_", " ").title().replace("Tp ", "TP ")
 
 
 @dataclass
@@ -438,8 +479,9 @@ def place_items(cfg, items, room, settings):
     for section in ("TOILET", "SHOWER", "DOOR", "WINDOW", "SHOWER_TRIM"):
         if section in items:
             e, it = cfg[section], items[section]
-            wall = (e.get("WALL") or "N").upper()
-            bottom = num(e, "OFF_FLOOR", {"window": 42, "shower_trim": 42}.get(it.kind, 0))
+            wall = (e.get("WALL") or "N").upper()[:1]
+            base = WALL_HUNG_BOWL_BOTTOM if it.extra.get("type") == "wall-hung" else 0
+            bottom = num(e, "OFF_FLOOR", {"window": 42, "shower_trim": 42}.get(it.kind, base))
             placed.append(Placed(it, wall, num(e, "POSITION", room.wall_len(wall) / 2), bottom))
 
     if "TUB" in items:
@@ -453,6 +495,28 @@ def place_items(cfg, items, room, settings):
         e, it = cfg["CEILING_LIGHT"], items["CEILING_LIGHT"]
         placed.append(Placed(it, "N", 0, room.ceiling - it.h,
                              x=num(e, "X", room.width / 2), y=num(e, "Y", room.length / 2)))
+
+    # accessories last, so automatic spots can see every fixture
+    toilet = next((p for p in placed if p.kind == "toilet"), None)
+    for section in ACCESSORIES:
+        if section not in items:
+            continue
+        e, it = cfg[section], items[section]
+        bottom = num(e, "OFF_FLOOR", ACCESSORY_CENTER[it.kind] - it.h / 2)
+        wall = (e.get("WALL") or "").upper()[:1]
+        pos = num(e, "POSITION")
+        if section == "TP_HOLDER" and toilet and (not wall or pos is None):
+            # beside the toilet, on whichever side has more room
+            wall = wall or toilet.wall
+            floor = [q for q in placed if q.kind in FLOOR_KINDS]
+            room_left = side_clearance(room, toilet, floor, True)
+            room_right = side_clearance(room, toilet, floor, False)
+            clear = max(room_left, room_right)
+            side = min(toilet.item.w / 2 + 6 + it.w / 2, clear - it.w / 2 - 1)   # stay clear of walls/showers
+            pos = toilet.u - side if room_left > room_right else toilet.u + side
+        wall = wall if wall in ("N", "E", "S", "W") else (vanity_p.wall if vanity_p else "N")
+        placed.append(Placed(it, wall, pos if pos is not None else room.wall_len(wall) / 2, bottom))
+
     return placed
 
 
@@ -491,6 +555,17 @@ def check_layout(room, placed):
                     notes.append("A sink centerline is less than 15\" from a side wall (code minimum).")
         if p.kind == "shower" and min(p.item.w, p.item.d) < 30:
             notes.append("Shower is smaller than the 30\" x 30\" code minimum.")
+        if p.item.section in ACCESSORIES:
+            for q in floor:
+                wet = q.kind == "shower" or (q.kind == "tub" and q.item.extra.get("type") != "freestanding")
+                if not wet:
+                    continue
+                x0, y0, x1, y1 = q.footprint(room)
+                us = [room.to_wall(p.wall, x, y) for x, y in ((x0, y0), (x1, y1))]
+                qu0, qu1 = sorted(u for u, _ in us)
+                if min(b for _, b in us) < 1 and qu0 < p.u + p.item.w / 2 and qu1 > p.u - p.item.w / 2:
+                    notes.append(f"{p.item.label} on the {p.wall} wall is inside the "
+                                 f"{q.item.label.lower()} area - check WALL / POSITION.")
     return notes
 
 

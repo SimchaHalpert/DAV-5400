@@ -172,6 +172,9 @@ def draw_box_fixture(canvas, cam, p, u0, u1, z0, z1, Lb):
     if p.kind == "tub" and it.extra.get("type") == "freestanding":
         draw_oval_tub(d, cam, u0, u1, z0, z1, h)
         return
+    if p.kind == "toilet" and it.extra.get("type") == "wall-hung":
+        block(d, cam, (u0, u1), (p.bottom, p.bottom + h), (z0 + 2, z1 - 2), base, on_left)
+        return
     if p.kind == "toilet":
         wall_u = u0 if on_left else u1
         tank_u = wall_u + (9 if on_left else -9)
@@ -284,6 +287,8 @@ def describe_room(room, placed, tiles, colors):
         seen.add(it.section)
         count = sum(1 for q in placed if q.item is it)
         what = it.name or it.label
+        if it.extra.get("type"):
+            what += f" ({it.extra['type']})"
         finish = f", finish {it.finish}" if it.finish else ""
         qty = f"{count} x " if count > 1 else ""
         lines.append(f"- {it.label}: {qty}{what}{finish}, {fmt_dim(it.w)} W x {fmt_dim(it.h)} H.")

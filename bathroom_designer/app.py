@@ -40,6 +40,8 @@ CHOICES = {
     "SINKS": [["1", "1"], ["2", "2"]],
     "COUNT": [["", "Auto (one per sink)"], ["1", "1"], ["2", "2"], ["3", "3"]],
     "TYPE": [["alcove", "Alcove (built-in)"], ["freestanding", "Freestanding"]],
+    "TYPE@TOILET": [["one-piece", "One-piece"], ["two-piece", "Two-piece"], ["wall-hung", "Wall-hung"]],
+    "WALL@TP_HOLDER": [["", "Auto (next to toilet)"]] + WALL_CHOICES,
     "SWING": [["left", "Hinge on left"], ["right", "Hinge on right"]],
     "PATTERN": [[p, p[0].upper() + p[1:]] for p in PATTERNS],
     "RENDER_WALL": [["", "Auto (vanity wall)"]] + WALL_CHOICES,
@@ -57,7 +59,7 @@ LABELS = {"OFF_FLOOR": "Off floor (in)", "POSITION": "Position (in from left cor
           "Y": "Y (in from north)", "TILE_SIZE": "Tile size (in)", "GEMINI_API_KEY": "Gemini API key",
           "ROOM_NAME": "Room name", "LENGTH": "Length N-S (in)", "CEILING": "Ceiling (in)",
           "MIRROR_GAP": "Mirror gap above faucet (in)", "RENDER_WALL": "Rendering looks at",
-          "URL": "Product link", "DIRECTION": "Long side runs"}
+          "URL": "Product link", "DIRECTION": "Long side runs", "TYPE": "Type"}
 
 
 def schema():
@@ -71,6 +73,8 @@ def schema():
             if f == "DIRECTION":
                 opts = FLOOR_DIRECTIONS if s == "FLOOR_TILE" else WALL_DIRECTIONS
                 spec["choices"] = [[o, o[0].upper() + o[1:]] for o in opts]
+            elif f"{f}@{s}" in CHOICES:
+                spec["choices"] = CHOICES[f"{f}@{s}"]
             elif f in CHOICES:
                 spec["choices"] = CHOICES[f]
             elif f in COLOR_FIELDS:
@@ -85,7 +89,7 @@ def schema():
             if f in SIZE_FIELDS and s in FIXTURES and s not in FIXED_SIZE:
                 spec["placeholder"] = "from website"
             fields.append(spec)
-        sections.append({"name": s, "title": s.replace("_", " ").title(), "help": SECTION_HELP.get(s, ""),
+        sections.append({"name": s, "title": s.replace("_", " ").title().replace("Tp ", "TP "), "help": SECTION_HELP.get(s, ""),
                          "fields": fields})
     templates = {}
     for name, t in TEMPLATES.items():

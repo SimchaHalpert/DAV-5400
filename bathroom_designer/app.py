@@ -319,7 +319,7 @@ $('prevBtn').onclick=doPreview;
 $('planFile').onchange=()=>{const f=$('planFile').files[0];if(!f)return;const url=URL.createObjectURL(f);
   $('planOut').innerHTML=`<div class="plan-view" style="margin-top:10px">${f.type==='application/pdf'?`<object data="${url}" type="application/pdf"></object>`:`<img src="${url}">`}</div>`};
 $('planBtn').onclick=async()=>{const f=$('planFile').files[0];if(!f){alert('Choose a plan file first.');return}
-  const b=$('planBtn');b.disabled=true;b.textContent='Reading…';
+  const b=$('planBtn');b.disabled=true;b.textContent='Reading… (up to a minute)';
   const view=$('planOut').querySelector('.plan-view');const keep=view?view.outerHTML:'';
   try{const data=await new Promise((ok,bad)=>{const rd=new FileReader();rd.onload=()=>ok(rd.result.split(',')[1]);rd.onerror=bad;rd.readAsDataURL(f)});
     const key=(document.getElementById('SETTINGS.GEMINI_API_KEY')||{}).value||'';

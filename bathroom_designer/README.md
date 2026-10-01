@@ -20,6 +20,13 @@ Optional, for much cleaner product cut-outs: `pip install "rembg[cpu]"`
 
 Put your logo in this folder as `logo.png`.
 
+## Updating
+Stop the app (Ctrl + C), then in this folder run:
+```
+./update.sh
+```
+It downloads the latest version and keeps your projects, output, saved key, and setup.
+
 ## Easiest: the web form
 ```
 python app.py

@@ -7,6 +7,7 @@ suitable model on the account, and remember it for the rest of the run.
 
 import os
 import re
+import time
 from pathlib import Path
 
 import requests
@@ -39,7 +40,7 @@ def _version(name):
     return float(m.group(1)) if m else 0.0
 
 
-def pick_model(key, want):
+def pick_model(key, want, exclude=()):
     """Newest model on this account for text+vision ('text') or image output ('image')."""
     resp = requests.get(f"{BASE}/models", params={"pageSize": 200}, headers={"x-goog-api-key": key}, timeout=30)
     resp.raise_for_status()
@@ -51,6 +52,7 @@ def pick_model(key, want):
         skip = ("image", "tts", "live", "embedding", "audio", "lite", "thinking")
         cands = [n for n in names if "flash" in n and not any(s in n for s in skip)]
         cands = cands or [n for n in names if "pro" in n and not any(s in n for s in skip)]
+    cands = [n for n in cands if n not in exclude]
     if not cands:
         raise RuntimeError(f"No Gemini {want} model is available on this API key.")
     return max(cands, key=lambda n: (_version(n), "preview" not in n and "exp" not in n))
@@ -60,6 +62,7 @@ def generate(body, key, model, want, timeout=300):
     """POST generateContent, switching to a current model if this one was retired."""
     model = _chosen.get(want, model)
     tried = set()
+    busy_waits = [5, 15, 30]          # seconds; Google's "high demand" errors are usually brief
     while True:
         tried.add(model)
         resp = requests.post(f"{BASE}/models/{model}:generateContent", json=body, timeout=timeout,
@@ -68,6 +71,22 @@ def generate(body, key, model, want, timeout=300):
             _chosen[want] = model
             return resp.json()
         text = resp.text
+        if resp.status_code in (429, 500, 503):
+            if busy_waits:
+                wait = busy_waits.pop(0)
+                print(f"  Gemini is busy ({resp.status_code}) - retrying in {wait}s")
+                time.sleep(wait)
+                tried.discard(model)
+                continue
+            try:                      # still busy: try another current model once
+                alt = pick_model(key, want, exclude=tried)
+            except Exception:
+                alt = None
+            if alt:
+                print(f"  {model} is still busy - trying {alt}")
+                model, busy_waits = alt, [10]
+                continue
+            raise RuntimeError("Google's Gemini servers are busy right now. Wait a few minutes and try again.")
         gone = resp.status_code == 404 or "no longer available" in text or "not found" in text.lower()
         if not gone:
             if resp.status_code in (400, 403) and "API key" in text:

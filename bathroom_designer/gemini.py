@@ -71,7 +71,7 @@ def generate(body, key, model, want, timeout=300):
         gone = resp.status_code == 404 or "no longer available" in text or "not found" in text.lower()
         if not gone:
             if resp.status_code in (400, 403) and "API key" in text:
-                raise RuntimeError("Gemini rejected the API key. Check it in Settings (it starts with AIza).")
+                raise RuntimeError("Gemini rejected the API key. Paste it again in Settings (copy it fresh from aistudio.google.com/apikey).")
             raise RuntimeError(f"Gemini returned {resp.status_code}: {text[:300]}")
         suggested = re.findall(r"models/([\w.\-]+)", text)
         if want == "image":                       # a text-only suggestion can't draw images

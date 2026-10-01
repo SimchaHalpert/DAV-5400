@@ -19,6 +19,7 @@ WALL_THICKNESS = 4.5
 # Section -> (kind, default W, H, D). Order = order in the project file.
 FIXTURES = {
     "VANITY":        ("vanity", 36, 34.5, 21.5),
+    "VANITY_2":      ("vanity", 36, 34.5, 21.5),
     "FAUCET":        ("faucet", 6, 8, 5),
     "MIRROR":        ("mirror", 24, 32, 1),
     "SCONCES":       ("sconce", 5, 12, 5),
@@ -51,6 +52,8 @@ SECTION_HELP = {
     "ROOM": "Room size in inches. WIDTH = west-east, LENGTH = north-south.\n"
             "WALL_COLOR / TRIM_COLOR: hex code (#F2EFEA) or a name (white).",
     "VANITY": "SINKS = 1 or 2.",
+    "VANITY_2": "Second, separate vanity (gets its own faucets, mirror, and lights).\n"
+                "Product link blank = same product as VANITY.",
     "FAUCET": "Sits on the vanity, one per sink. WALL/POSITION come from the vanity.",
     "MIRROR": "Above the vanity. COUNT = number of mirrors (blank = one per sink).\n"
               "OFF_FLOOR blank = MIRROR_GAP inches above the faucet (never below 40\").",
@@ -85,6 +88,7 @@ SECTION_HELP = {
 FIXTURE_FIELDS = ["INCLUDE", "URL", "FINISH", "WIDTH", "HEIGHT", "DEPTH", "WALL", "POSITION", "OFF_FLOOR"]
 EXTRA_FIELDS = {
     "VANITY": ["SINKS"],
+    "VANITY_2": ["SINKS"],
     "MIRROR": ["COUNT"],
     "TUB": ["TYPE", "OFF_WALL"],
     "TOILET": ["TYPE"],
@@ -103,6 +107,7 @@ COMMON = {
     "PROJECT": {"COMPANY": "Aggregate Construction Group", "LOGO": "logo.png",
                 "CLIENT": "", "PROJECT": "Bathroom remodel", "ROOM_NAME": ""},
     "ROOM": {"CEILING": "96", "WALL_COLOR": "#F2EFEA", "TRIM_COLOR": "#FFFFFF"},
+    "VANITY_2": {"INCLUDE": "no", "SINKS": "1"},
     "FAUCET": {"INCLUDE": "yes"},
     "MIRROR": {"INCLUDE": "yes"},
     "SCONCES": {"INCLUDE": "yes"},
@@ -165,7 +170,7 @@ TEMPLATES = {
         "about": "10' x 12' primary bath: double vanity, freestanding tub under a window, "
                  "walk-in shower, toilet.",
         "PROJECT": {"ROOM_NAME": "Primary Bath"},
-        "ROOM": {"WIDTH": "120", "LENGTH": "144", "CEILING": "108"},
+        "ROOM": {"WIDTH": "120", "LENGTH": "144"},
         "VANITY": {"INCLUDE": "yes", "WIDTH": "72", "WALL": "N", "POSITION": "60", "SINKS": "2"},
         "MIRROR": {"COUNT": "2"},
         "TUB": {"INCLUDE": "yes", "TYPE": "freestanding", "WALL": "E", "POSITION": "90", "OFF_WALL": "8"},
@@ -416,53 +421,55 @@ def place_items(cfg, items, room, settings):
         v = to_inches(entry.get(key))
         return default if v is None else v
 
-    vanity_p = None
-    if "VANITY" in items:
-        e, it = cfg["VANITY"], items["VANITY"]
-        vanity_p = Placed(it, e.get("WALL", "N").upper() or "N", num(e, "POSITION", room.width / 2),
-                          num(e, "OFF_FLOOR", 0))
-        placed.append(vanity_p)
-
-    sink_us, faucet_top = [], None
-    if vanity_p:
-        n = max(1, int(num(cfg["VANITY"], "SINKS", 1)))
-        left = vanity_p.u - vanity_p.item.w / 2
-        sink_us = [left + vanity_p.item.w * (i + 0.5) / n for i in range(n)]
-        vanity_p.item.extra["sinks"] = sink_us
+    vanity_p = None                          # first vanity: default wall for accessories, etc.
+    for vsec in ("VANITY", "VANITY_2"):      # each vanity gets its own faucets, mirrors, and lights
+        if vsec not in items:
+            continue
+        e, it = cfg[vsec], items[vsec]
+        this = Placed(it, (e.get("WALL") or "N").upper()[:1], num(e, "POSITION", room.width / 2),
+                      num(e, "OFF_FLOOR", 0))
+        placed.append(this)
+        vanity_p = vanity_p or this
+        vp = this
+        faucet_top = None
+        n = max(1, int(num(e, "SINKS", 1)))
+        left = vp.u - vp.item.w / 2
+        sink_us = [left + vp.item.w * (i + 0.5) / n for i in range(n)]
+        vp.item.extra["sinks"] = sink_us
 
         if "FAUCET" in items:
             f = items["FAUCET"]
-            bottom = num(cfg["FAUCET"], "OFF_FLOOR", vanity_p.top)
+            bottom = num(cfg["FAUCET"], "OFF_FLOOR", vp.top)
             for u in sink_us:
-                placed.append(Placed(f, vanity_p.wall, u, bottom))
+                placed.append(Placed(f, vp.wall, u, bottom))
             faucet_top = bottom + f.h
 
         mirrors = []
         if "MIRROR" in items:
             m = items["MIRROR"]
-            count = int(num(cfg["MIRROR"], "COUNT", len(sink_us)))
+            count = int(num(cfg["MIRROR"], "COUNT", len(sink_us))) if vsec == "VANITY" else len(sink_us)
             us = sink_us if count == len(sink_us) else \
-                [left + vanity_p.item.w * (i + 0.5) / count for i in range(count)]
+                [left + vp.item.w * (i + 0.5) / count for i in range(count)]
             gap = num(settings, "MIRROR_GAP", 6)
-            base = (faucet_top or vanity_p.top + 8) + gap
+            base = (faucet_top or vp.top + 8) + gap
             bottom = num(cfg["MIRROR"], "OFF_FLOOR", max(base, 40))
             for u in us:
-                p = Placed(m, vanity_p.wall, u, bottom)
+                p = Placed(m, vp.wall, u, bottom)
                 placed.append(p)
                 mirrors.append(p)
 
         if "VANITY_LIGHT" in items:
             vl = items["VANITY_LIGHT"]
-            for mp in mirrors or [vanity_p]:
-                top = mp.top if mp is not vanity_p else vanity_p.top + 40
-                placed.append(Placed(vl, vanity_p.wall, mp.u, num(cfg["VANITY_LIGHT"], "OFF_FLOOR", top + 4)))
+            for mp in mirrors or [vp]:
+                top = mp.top if mp is not vp else vp.top + 40
+                placed.append(Placed(vl, vp.wall, mp.u, num(cfg["VANITY_LIGHT"], "OFF_FLOOR", top + 4)))
 
         if "SCONCES" in items:
             s = items["SCONCES"]
             bottom = num(cfg["SCONCES"], "OFF_FLOOR", 66 - s.h / 2)
             spots = []
-            for mp in mirrors or [vanity_p]:
-                half = mp.item.w / 2 if mp is not vanity_p else 12
+            for mp in mirrors or [vp]:
+                half = mp.item.w / 2 if mp is not vp else 12
                 spots += [mp.u - half - s.w / 2 - 4, mp.u + half + s.w / 2 + 4]
             spots.sort()
             merged = []
@@ -471,10 +478,10 @@ def place_items(cfg, items, room, settings):
                     merged[-1] = (merged[-1] + u) / 2
                 else:
                     merged.append(u)
-            wall_len = room.wall_len(vanity_p.wall)
+            wall_len = room.wall_len(vp.wall)
             for u in merged:
                 if s.w / 2 + 2 <= u <= wall_len - s.w / 2 - 2:     # skip one that would be past the corner
-                    placed.append(Placed(s, vanity_p.wall, u, bottom))
+                    placed.append(Placed(s, vp.wall, u, bottom))
 
     for section in ("TOILET", "SHOWER", "DOOR", "WINDOW", "SHOWER_TRIM"):
         if section in items:
@@ -514,10 +521,74 @@ def place_items(cfg, items, room, settings):
             clear = max(room_left, room_right)
             side = min(toilet.item.w / 2 + 6 + it.w / 2, clear - it.w / 2 - 1)   # stay clear of walls/showers
             pos = toilet.u - side if room_left > room_right else toilet.u + side
-        wall = wall if wall in ("N", "E", "S", "W") else (vanity_p.wall if vanity_p else "N")
+        elif section != "TP_HOLDER" and (wall not in WALLS or pos is None):
+            spot = auto_spot(room, placed, it, bottom, section, wall if wall in WALLS else None)
+            if spot:
+                wall, pos = spot
+        wall = wall if wall in WALLS else (vanity_p.wall if vanity_p else "N")
         placed.append(Placed(it, wall, pos if pos is not None else room.wall_len(wall) / 2, bottom))
 
     return placed
+
+
+def wall_obstacles(room, placed, wall):
+    """(u0, u1, v0, v1) boxes on a wall that an accessory must not overlap."""
+    boxes = []
+    for p in placed:
+        if p.x is not None:
+            continue
+        if p.wall == wall:
+            pad = 4 if p.kind in WALL_OPENINGS else 2          # door/window casing
+            boxes.append((p.u - p.item.w / 2 - pad, p.u + p.item.w / 2 + pad, p.bottom - pad, p.top + pad))
+        if p.kind in ("shower", "tub") and p.item.extra.get("type") != "freestanding":
+            x0, y0, x1, y1 = p.footprint(room)
+            us = [room.to_wall(wall, x, y) for x, y in ((x0, y0), (x1, y1))]
+            if min(b for _, b in us) < 1:                      # wet area touches this wall
+                u0, u1 = sorted(u for u, _ in us)
+                boxes.append((u0 - 2, u1 + 2, 0, room.ceiling))
+        elif p.kind in FLOOR_KINDS and p.wall != wall:
+            x0, y0, x1, y1 = p.footprint(room)
+            us = [room.to_wall(wall, x, y) for x, y in ((x0, y0), (x1, y1))]
+            if min(b for _, b in us) < 1:
+                u0, u1 = sorted(u for u, _ in us)
+                boxes.append((u0 - 2, u1 + 2, 0, p.top + 2))
+    return boxes
+
+
+def auto_spot(room, placed, it, bottom, section, only_wall=None):
+    """Free wall spot for a towel bar / ring / robe hook, as close as possible to where it's used:
+    rings by a vanity, bars by the shower or tub, hooks by the door."""
+    def center(p):
+        x0, y0, x1, y1 = p.footprint(room)
+        return (x0 + x1) / 2, (y0 + y1) / 2
+
+    vanities = [p for p in placed if p.kind == "vanity"]
+    wet = [p for p in placed if p.kind in ("shower", "tub")]
+    doors = [p for p in placed if p.kind == "door"]
+    if it.kind == "towel_ring":
+        targets = vanities[1:2] if section.endswith("_2") and len(vanities) > 1 else vanities[:1]
+    elif it.kind == "towel_bar":
+        targets = wet[:1] or vanities[:1]
+    else:
+        targets = doors[:1] or wet[:1]
+    if not targets:
+        return None
+    tx, ty = center(targets[0])
+    top = bottom + it.h
+    best = None
+    for wall in ([only_wall] if only_wall else WALLS):
+        boxes = wall_obstacles(room, placed, wall)
+        L = room.wall_len(wall)
+        u = it.w / 2 + 3
+        while u <= L - it.w / 2 - 3:
+            a0, a1 = u - it.w / 2, u + it.w / 2
+            if not any(a1 > b0 and a0 < b1 and top > c0 and bottom < c1 for b0, b1, c0, c1 in boxes):
+                x, y = room.to_plan(wall, u, 0)
+                dist = ((x - tx) ** 2 + (y - ty) ** 2) ** 0.5
+                if best is None or dist < best[0]:
+                    best = (dist, wall, u)
+            u += 2
+    return (best[1], round(best[2] * 2) / 2) if best else None
 
 
 # ---------------------------------------------------------------- checks

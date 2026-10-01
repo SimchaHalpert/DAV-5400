@@ -77,12 +77,21 @@ image model. Each build makes 2 images (usually a few cents to ~$0.30 total, dep
 AI images are for design intent. They may not match products exactly, so the product-photo
 rendering and drawings are the reference.
 
+## Two vanities
+`VANITY_2` is a second, separate vanity with its own wall, position, size, and sinks. It gets its own
+faucets, mirror(s), sconces, and vanity light (same products as the first). Leave its link blank to use
+the same vanity product. Reading a plan with two vanities fills in both.
+
+Ceiling height defaults to 8'-0" unless the plan or project says otherwise.
+
 ## Toilet and accessories
 - Toilet `TYPE`: one-piece, two-piece, or wall-hung. Wall-hung shows the flush plate and in-wall
   carrier in the elevations and a tankless plan symbol.
 - TP holder, towel bars, towel rings, robe hooks: each has a link, finish, wall, position, and height
   (`OFF_FLOOR`, blank = standard: TP 26", towel bar 48", ring 54", hook 66" to center).
   The TP holder goes next to the toilet automatically if its wall/position are blank.
+- Towel bars, rings, and hooks set to **Auto** (blank wall) find a free spot on the walls: rings next to a
+  vanity, bars near the shower/tub, hooks by the door, never over a mirror, opening, or wet area.
 - There's a second towel bar / ring / hook. Leave its link blank to use the same product as the first.
 
 ## What the checks look at

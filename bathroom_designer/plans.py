@@ -118,40 +118,30 @@ def to_values(ext):
         if kind not in found:
             if kind != "door":
                 values[section] = {"INCLUDE": "no"}
+                if kind == "vanity":
+                    values["VANITY_2"] = {"INCLUDE": "no"}
             else:
                 notes.append("No door found on the plan - kept the layout's door. Check it.")
             continue
         items = found[kind]
-        if len(items) > 1:
-            notes.append(f"{len(items)} {kind}s on the plan; the form has one - used the largest.")
-        f, box = max(items, key=lambda it: (it[1][2] - it[1][0]) * (it[1][3] - it[1][1]))
-        wall, gap = nearest_wall(room, box)
-        u, along, depth = along_and_depth(room, wall, box)
-        v = {"INCLUDE": "yes", "WALL": wall, "POSITION": r(u), "WIDTH": r(along)}
-        if kind in ("vanity", "toilet", "tub", "shower"):
-            v["DEPTH"] = r(depth)
+        items.sort(key=lambda it: -(it[1][2] - it[1][0]) * (it[1][3] - it[1][1]))      # largest first
         if kind == "vanity":
-            v["SINKS"] = "2" if (f.get("sinks") or 1) >= 2 else "1"
-        if kind == "toilet":
-            v.pop("WIDTH")                    # plans draw toilets generic; keep the product's width
-            if f.get("toilet_type") in ("one-piece", "two-piece", "wall-hung"):
-                v["TYPE"] = f["toilet_type"]
-        if kind == "tub":
-            free = (f.get("tub_type") == "freestanding") or gap > 3
-            v["TYPE"] = "freestanding" if free else "alcove"
-            if free:
-                v["OFF_WALL"] = r(gap)
-        if kind == "door":
-            hinge = f.get("hinge_xy")
-            if hinge and len(hinge) == 2:
-                hu, _ = room.to_wall(wall, float(hinge[0]), float(hinge[1]))
-                v["SWING"] = "left" if hu < u else "right"
-        values[section] = v
+            values["VANITY_2"] = {"INCLUDE": "no"}
+            if len(items) >= 2:
+                values["VANITY_2"] = fixture_values(room, kind, *items[1])
+            if len(items) > 2:
+                notes.append(f"{len(items)} vanities on the plan; the form has two - used the two largest.")
+        elif len(items) > 1:
+            notes.append(f"{len(items)} {kind}s on the plan; the form has one - used the largest.")
+        f, box = items[0]
+        values[section] = fixture_values(room, kind, f, box)
 
+    # things that follow from the room and the wet areas
     # things that follow from the room and the wet areas
     values["CEILING_LIGHT"] = {"X": r(width / 2), "Y": r(length / 2)}
     if not ext.get("ceiling_in"):
-        notes.append("No ceiling height on the plan - set Ceiling in the Room section.")
+        values["ROOM"]["CEILING"] = "96"
+        notes.append("No ceiling height on the plan - assumed the standard 8'-0\". Change it in Room if needed.")
     trim = {"INCLUDE": "no"}
     if "shower" in found:
         s = values["SHOWER"]
@@ -166,7 +156,36 @@ def to_values(ext):
                 trim = {"INCLUDE": "yes", "WALL": end, "POSITION": r(u)}
                 break
     values["SHOWER_TRIM"] = trim
+    values["MIRROR"] = {"COUNT": ""}                      # one mirror per sink
+    for acc in ("TP_HOLDER", "TOWEL_BAR", "TOWEL_BAR_2", "TOWEL_RING", "TOWEL_RING_2", "ROBE_HOOK", "ROBE_HOOK_2"):
+        values[acc] = {"WALL": "", "POSITION": ""}       # let the app find free spots in this room
     return values, notes
+
+
+def fixture_values(room, kind, f, box):
+    """One fixture box -> its form fields."""
+    wall, gap = nearest_wall(room, box)
+    u, along, depth = along_and_depth(room, wall, box)
+    v = {"INCLUDE": "yes", "WALL": wall, "POSITION": r(u), "WIDTH": r(along)}
+    if kind in ("vanity", "toilet", "tub", "shower"):
+        v["DEPTH"] = r(depth)
+    if kind == "vanity":
+        v["SINKS"] = "2" if (f.get("sinks") or 1) >= 2 else "1"
+    if kind == "toilet":
+        v.pop("WIDTH")                    # plans draw toilets generic; keep the product's width
+        if f.get("toilet_type") in ("one-piece", "two-piece", "wall-hung"):
+            v["TYPE"] = f["toilet_type"]
+    if kind == "tub":
+        free = (f.get("tub_type") == "freestanding") or gap > 3
+        v["TYPE"] = "freestanding" if free else "alcove"
+        if free:
+            v["OFF_WALL"] = r(gap)
+    if kind == "door":
+        hinge = f.get("hinge_xy")
+        if hinge and len(hinge) == 2:
+            hu, _ = room.to_wall(wall, float(hinge[0]), float(hinge[1]))
+            v["SWING"] = "left" if hu < u else "right"
+    return v
 
 
 def nearest_gap(room, wall, box):

@@ -43,6 +43,8 @@ CHOICES = {
     "TYPE": [["alcove", "Alcove (built-in)"], ["freestanding", "Freestanding"]],
     "TYPE@TOILET": [["one-piece", "One-piece"], ["two-piece", "Two-piece"], ["wall-hung", "Wall-hung"]],
     "WALL@TP_HOLDER": [["", "Auto (next to toilet)"]] + WALL_CHOICES,
+    **{f"WALL@{s}": [["", "Auto (find a free spot)"]] + WALL_CHOICES
+       for s in ("TOWEL_BAR", "TOWEL_BAR_2", "TOWEL_RING", "TOWEL_RING_2", "ROBE_HOOK", "ROBE_HOOK_2")},
     "SWING": [["left", "Hinge on left"], ["right", "Hinge on right"]],
     "PATTERN": [[p, p[0].upper() + p[1:]] for p in PATTERNS],
     "RENDER_WALL": [["", "Auto (vanity wall)"]] + WALL_CHOICES,

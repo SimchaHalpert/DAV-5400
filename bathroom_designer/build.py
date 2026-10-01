@@ -7,6 +7,7 @@
 """
 
 import argparse
+from dataclasses import replace
 import re
 import sys
 from pathlib import Path
@@ -48,7 +49,14 @@ def load_items(cfg, fetch=True):
                 default = TOILET_TYPES[extra["type"]]
         base = section[:-2] if section.endswith("_2") else None
         if base and not entry.get("URL") and base in items:
-            items[section] = items[base]          # second one of the same product
+            src = items[base]                     # second one of the same product
+            if section == "VANITY_2":             # own copy: its own sinks, and its own size if given
+                items[section] = replace(src, section=section, extra=dict(src.extra),
+                                         w=to_inches(entry.get("WIDTH")) or src.w,
+                                         h=to_inches(entry.get("HEIGHT")) or src.h,
+                                         d=to_inches(entry.get("DEPTH")) or src.d)
+            else:
+                items[section] = src
             print(f"  {section:<13} same product as {base}")
             continue
         url, finish = entry.get("URL", ""), entry.get("FINISH", "")

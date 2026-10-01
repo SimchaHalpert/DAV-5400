@@ -158,7 +158,7 @@ def to_values(ext):
     values["SHOWER_TRIM"] = trim
     values["MIRROR"] = {"COUNT": ""}                      # one mirror per sink
     for acc in ("TP_HOLDER", "TOWEL_BAR", "TOWEL_BAR_2", "TOWEL_RING", "TOWEL_RING_2", "ROBE_HOOK", "ROBE_HOOK_2"):
-        values[acc] = {"WALL": "", "POSITION": ""}       # let the app find free spots in this room
+        values[acc] = {"INCLUDE": "no", "WALL": "", "POSITION": ""}   # you add these and choose where
     return values, notes
 
 

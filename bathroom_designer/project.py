@@ -60,7 +60,8 @@ SECTION_HELP = {
     "SCONCES": "Flank each mirror. OFF_FLOOR blank = centered at 66\".",
     "VANITY_LIGHT": "Above each mirror.",
     "TOILET": "TYPE = one-piece, two-piece, or wall-hung.",
-    "TP_HOLDER": "Toilet paper holder. WALL / POSITION blank = next to the toilet. Default 26\" high (center).",
+    "TP_HOLDER": "Toilet paper holder (off until you turn it on). WALL / POSITION blank = the app suggests\n"
+                 "a spot next to the toilet and tells you where. Default 26\" high (center).",
     "TOWEL_BAR": "OFF_FLOOR blank = bar centered at 48\".",
     "TOWEL_BAR_2": "Second towel bar. Product link blank = same product as TOWEL_BAR.",
     "TOWEL_RING": "OFF_FLOOR blank = centered at 54\".",
@@ -114,12 +115,12 @@ COMMON = {
     "VANITY_LIGHT": {"INCLUDE": "no"},
     "CEILING_LIGHT": {"INCLUDE": "yes"},
     "TOILET": {"TYPE": "one-piece"},
-    "TP_HOLDER": {"INCLUDE": "yes"},
-    "TOWEL_BAR": {"INCLUDE": "yes"},
+    "TP_HOLDER": {"INCLUDE": "no"},          # accessories are opt-in: you choose what goes where
+    "TOWEL_BAR": {"INCLUDE": "no"},
     "TOWEL_BAR_2": {"INCLUDE": "no"},
-    "TOWEL_RING": {"INCLUDE": "yes"},
+    "TOWEL_RING": {"INCLUDE": "no"},
     "TOWEL_RING_2": {"INCLUDE": "no"},
-    "ROBE_HOOK": {"INCLUDE": "yes"},
+    "ROBE_HOOK": {"INCLUDE": "no"},
     "ROBE_HOOK_2": {"INCLUDE": "no"},
     "WALL_TILE": {"HEIGHT": "0", "TILE_SIZE": "3x12", "PATTERN": "offset 1/2", "DIRECTION": "horizontal",
                   "GROUT": "#E6E3DE",
@@ -182,7 +183,7 @@ TEMPLATES = {
         "TOILET": {"INCLUDE": "yes", "TYPE": "wall-hung", "WALL": "W", "POSITION": "84"},
         "TOWEL_BAR": {"WALL": "S", "POSITION": "20"},
         "TOWEL_RING": {"WALL": "W", "POSITION": "128"},
-        "TOWEL_RING_2": {"INCLUDE": "yes", "WALL": "E", "POSITION": "16"},
+        "TOWEL_RING_2": {"WALL": "E", "POSITION": "16"},
         "ROBE_HOOK": {"WALL": "S", "POSITION": "38"},
         "CEILING_LIGHT": {"X": "60", "Y": "72"},
         "WALL_TILE": {"HEIGHT": "0"},
@@ -390,6 +391,7 @@ class Placed:
     off_wall: float = 0.0
     x: float = None              # plan center (ceiling lights)
     y: float = None
+    auto: bool = False           # spot chosen by the app (reported so you can change it)
 
     @property
     def kind(self):
@@ -525,8 +527,9 @@ def place_items(cfg, items, room, settings):
             spot = auto_spot(room, placed, it, bottom, section, wall if wall in WALLS else None)
             if spot:
                 wall, pos = spot
+        auto = not (e.get("WALL") and e.get("POSITION"))
         wall = wall if wall in WALLS else (vanity_p.wall if vanity_p else "N")
-        placed.append(Placed(it, wall, pos if pos is not None else room.wall_len(wall) / 2, bottom))
+        placed.append(Placed(it, wall, pos if pos is not None else room.wall_len(wall) / 2, bottom, auto=auto))
 
     return placed
 
@@ -626,6 +629,9 @@ def check_layout(room, placed):
                     notes.append("A sink centerline is less than 15\" from a side wall (code minimum).")
         if p.kind == "shower" and min(p.item.w, p.item.d) < 30:
             notes.append("Shower is smaller than the 30\" x 30\" code minimum.")
+        if p.item.section in ACCESSORIES and p.auto:
+            notes.append(f"Auto-placed {p.item.label} on the {p.wall} wall, {p.u:.1f}\" from the left corner, "
+                         f"{p.bottom + p.item.h / 2:.0f}\" high (center). Set WALL / POSITION to choose.")
         if p.item.section in ACCESSORIES:
             for q in floor:
                 wet = q.kind == "shower" or (q.kind == "tub" and q.item.extra.get("type") != "freestanding")

@@ -59,46 +59,51 @@ def pick_model(key, want, exclude=()):
 
 
 def generate(body, key, model, want, timeout=300):
-    """POST generateContent, switching to a current model if this one was retired."""
+    """POST generateContent. Retired model -> switch to its replacement. Busy (503/429) ->
+    retry a few times, then try up to 2 other models, then stop with a clear message
+    (about 2 minutes at most)."""
     model = _chosen.get(want, model)
-    tried = set()
-    busy_waits = [5, 15, 30]          # seconds; Google's "high demand" errors are usually brief
+    tried = []                        # models already tried, never revisited
+    switches_left = 2
     while True:
-        tried.add(model)
-        resp = requests.post(f"{BASE}/models/{model}:generateContent", json=body, timeout=timeout,
-                             headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+        if model not in tried:
+            tried.append(model)
+        waits = [5, 15, 30] if len(tried) == 1 else [10]
+        while True:
+            resp = requests.post(f"{BASE}/models/{model}:generateContent", json=body, timeout=timeout,
+                                 headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+            if resp.status_code not in (429, 500, 503) or not waits:
+                break
+            wait = waits.pop(0)
+            print(f"  Gemini is busy ({resp.status_code}) - retrying in {wait}s")
+            time.sleep(wait)
         if resp.status_code == 200:
             _chosen[want] = model
             return resp.json()
         text = resp.text
         if resp.status_code in (429, 500, 503):
-            if busy_waits:
-                wait = busy_waits.pop(0)
-                print(f"  Gemini is busy ({resp.status_code}) - retrying in {wait}s")
-                time.sleep(wait)
-                tried.discard(model)
-                continue
-            try:                      # still busy: try another current model once
-                alt = pick_model(key, want, exclude=tried)
-            except Exception:
-                alt = None
-            if alt:
-                print(f"  {model} is still busy - trying {alt}")
-                model, busy_waits = alt, [10]
-                continue
-            raise RuntimeError("Google's Gemini servers are busy right now. Wait a few minutes and try again.")
+            alt = None
+            if switches_left > 0:
+                try:
+                    alt = pick_model(key, want, exclude=tried)
+                except Exception:
+                    alt = None
+            if not alt:
+                raise RuntimeError("Google's Gemini servers are overloaded right now (not a problem on your end). "
+                                   "Wait 5-10 minutes and try again.")
+            switches_left -= 1
+            print(f"  {model} is still busy - trying {alt}")
+            model = alt
+            continue
         gone = resp.status_code == 404 or "no longer available" in text or "not found" in text.lower()
         if not gone:
             if resp.status_code in (400, 403) and "API key" in text:
-                raise RuntimeError("Gemini rejected the API key. Paste it again in Settings (copy it fresh from aistudio.google.com/apikey).")
+                raise RuntimeError("Gemini rejected the API key. Paste it again in Settings "
+                                   "(copy it fresh from aistudio.google.com/apikey).")
             raise RuntimeError(f"Gemini returned {resp.status_code}: {text[:300]}")
         suggested = re.findall(r"models/([\w.\-]+)", text)
         if want == "image":                       # a text-only suggestion can't draw images
             suggested = [s for s in suggested if "image" in s]
-        nxt = next((s for s in suggested if s not in tried and s != model), None)
-        if nxt is None:
-            nxt = pick_model(key, want)
-        if nxt in tried:
-            raise RuntimeError(f"Gemini model {model} isn't available and no replacement was found: {text[:200]}")
+        nxt = next((s for s in suggested if s not in tried), None) or pick_model(key, want, exclude=tried)
         print(f"  Gemini model {model} is retired - using {nxt}")
         model = nxt

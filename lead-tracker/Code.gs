@@ -66,6 +66,7 @@ function onOpen() {
     .addItem('2. Set API keys', 'setApiKeys')
     .addItem('3. Run now', 'runUpdate')
     .addSeparator()
+    .addItem('Test connection', 'testConnection')
     .addItem('Turn on weekday auto-update (7am)', 'installTriggers')
     .addItem('Turn off auto-update', 'removeTriggers')
     .addToUi();
@@ -124,6 +125,30 @@ function setApiKeys() {
   if (r2.getSelectedButton() !== ui.Button.OK) return;
   if (r2.getResponseText().trim()) props.setProperty('TRACERFY_API_KEY', r2.getResponseText().trim());
   ui.alert('Keys saved. Run Lead Tracker > 3. Run now.');
+}
+
+/** Diagnose Google -> RentCast connectivity with one tiny request (limit=1). */
+function testConnection() {
+  var key = PropertiesService.getScriptProperties().getProperty('RENTCAST_API_KEY');
+  var lines = [];
+  function probe(label, url, headers) {
+    var t0 = Date.now();
+    try {
+      var r = UrlFetchApp.fetch(url, { headers: headers || {}, muteHttpExceptions: true });
+      lines.push(label + ': HTTP ' + r.getResponseCode() + ' in ' + ((Date.now() - t0) / 1000).toFixed(1) + 's' +
+        (r.getResponseCode() !== 200 ? ' - ' + r.getContentText().slice(0, 150) : ''));
+    } catch (e) {
+      lines.push(label + ': FAILED after ' + ((Date.now() - t0) / 1000).toFixed(1) + 's - ' + String(e.message || e).slice(0, 150));
+    }
+  }
+  probe('Google (control)', 'https://www.google.com/generate_204');
+  probe('RentCast (no key)', 'https://api.rentcast.io/v1/properties?zipCode=90064&limit=1');
+  if (key) probe('RentCast (your key)', 'https://api.rentcast.io/v1/properties?zipCode=90064&limit=1', { 'X-Api-Key': key, 'Accept': 'application/json' });
+  else lines.push('RentCast (your key): no key saved');
+  var msg = lines.join('\n');
+  var log = SpreadsheetApp.getActive().getSheetByName(SHEET_LOG);
+  if (log) log.appendRow([new Date(), '', '', '', '', '', 'Connection test: ' + lines.join(' | ')]);
+  SpreadsheetApp.getUi().alert('Connection test', msg, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function installTriggers() {

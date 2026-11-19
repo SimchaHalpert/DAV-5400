@@ -162,25 +162,31 @@ function runUpdate() {
     var fetched = [];
 
     settings.zips.forEach(function (zip) {
+      // Each lookup is independent: if one fails, keep the other's leads.
+      var sold = [], listings = [];
       try {
-        var sold = rentcastFetchAll_(rentcastKey, '/properties', {
+        sold = rentcastFetchAll_(rentcastKey, '/properties', {
           zipCode: zip,
           propertyType: settings.propertyType,
           saleDateRange: '*:' + settings.soldDays
         }, quota, stats);
-        // Listings are only searchable by listed date (daysOld), so look back a year
-        // and filter by off-market date in code.
-        var listings = rentcastFetchAll_(rentcastKey, '/listings/sale', {
+      } catch (e) {
+        messages.push(zip + ' sold: ' + e.message);
+      }
+      try {
+        // Listings are only searchable by listed date (daysOld). A 1-year window times out,
+        // and homes that sell rarely sit 150+ days, so look back pendingDays + 120 (min 180).
+        listings = rentcastFetchAll_(rentcastKey, '/listings/sale', {
           zipCode: zip,
           propertyType: settings.propertyType,
           status: 'Inactive',
           price: '*:' + settings.maxPrice,
-          daysOld: '*:365'
+          daysOld: '*:' + Math.max(180, settings.pendingDays + 120)
         }, quota, stats);
-        fetched = fetched.concat(buildLeads(sold, listings, settings, now));
       } catch (e) {
-        messages.push(zip + ': ' + e.message);
+        messages.push(zip + ' pending: ' + e.message);
       }
+      fetched = fetched.concat(buildLeads(sold, listings, settings, now));
     });
 
     var leadsSheet = ss.getSheetByName(SHEET_LEADS);
@@ -442,7 +448,7 @@ function rentcastFetchAll_(apiKey, path, params, quota, stats) {
     var q = Object.keys(params).map(function (k) {
       return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
     }).join('&') + '&limit=' + limit + '&offset=' + offset;
-    var resp = UrlFetchApp.fetch(RENTCAST_BASE + path + '?' + q, {
+    var resp = fetchWithRetry_(RENTCAST_BASE + path + '?' + q, {
       method: 'get',
       headers: { 'X-Api-Key': apiKey, 'Accept': 'application/json' },
       muteHttpExceptions: true
@@ -457,6 +463,21 @@ function rentcastFetchAll_(apiKey, path, params, quota, stats) {
     if (page.length < limit) break;
   }
   return all;
+}
+
+/** UrlFetchApp throws on timeouts; retry once (and once on 429/5xx) after a short pause. */
+function fetchWithRetry_(url, opts) {
+  for (var attempt = 1; ; attempt++) {
+    try {
+      var resp = UrlFetchApp.fetch(url, opts);
+      var code = resp.getResponseCode();
+      if ((code === 429 || code >= 500) && attempt < 2) { Utilities.sleep(3000); continue; }
+      return resp;
+    } catch (e) {
+      if (attempt >= 2) throw new Error(String(e.message || e).replace(/apiKey=[^&]+/g, ''));
+      Utilities.sleep(3000);
+    }
+  }
 }
 
 function skipTrace_(apiKey, rows, now) {
@@ -525,8 +546,7 @@ function readLeads_(sheet) {
   if (values.length < 2) return [];
   var formulas = range.getFormulas(); // keep HYPERLINK formulas instead of their display text
   var header = values[0];
-  var props = PropertiesService.getDocumentProperties();
-  var meta = JSON.parse(props.getProperty('LEAD_META') || '{}');
+  var meta = readMeta_(sheet.getParent());
   return values.slice(1).map(function (r, idx) { return { r: r, f: formulas[idx + 1] }; })
     .filter(function (x) { return x.r[0]; }).map(function (x) {
     var r = x.r;
@@ -565,11 +585,32 @@ function writeLeads_(sheet, rows) {
   if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).clearContent();
   if (out.length) sheet.getRange(2, 1, out.length, header.length).setValues(out);
 
+  writeMeta_(sheet.getParent(), rows);
+}
+
+// Per-lead lookup details (street, city, raw owner names) kept on a hidden tab.
+// (Document properties cap at 9KB, which ~70 leads would exceed.)
+var SHEET_META = '_data';
+
+function readMeta_(ss) {
   var meta = {};
-  rows.forEach(function (r) {
-    meta[r['Property ID']] = { a: r._addressLine1, c: r._city, s: r._state, z: r._zip, n: r._ownerNames, t: r._ownerType };
+  var sh = ss.getSheetByName(SHEET_META);
+  if (!sh || sh.getLastRow() < 1) return meta;
+  sh.getRange(1, 1, sh.getLastRow(), 2).getValues().forEach(function (r) {
+    if (!r[0]) return;
+    try { meta[r[0]] = JSON.parse(r[1]); } catch (e) {}
   });
-  PropertiesService.getDocumentProperties().setProperty('LEAD_META', JSON.stringify(meta));
+  return meta;
+}
+
+function writeMeta_(ss, rows) {
+  var sh = ss.getSheetByName(SHEET_META);
+  if (!sh) { sh = ss.insertSheet(SHEET_META); sh.hideSheet(); }
+  sh.clearContents();
+  var out = rows.map(function (r) {
+    return [r['Property ID'], JSON.stringify({ a: r._addressLine1, c: r._city, s: r._state, z: r._zip, n: r._ownerNames, t: r._ownerType })];
+  });
+  if (out.length) sh.getRange(1, 1, out.length, 2).setValues(out);
 }
 
 function logRun_(ss, now, stats, monthUsed, messages) {

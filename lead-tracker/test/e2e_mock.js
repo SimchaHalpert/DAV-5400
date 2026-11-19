@@ -21,7 +21,8 @@ function fakeSheet(name) {
     getLastRow: () => grid.length, getLastColumn: () => width(),
     getRange: (r, c, nr = 1, nc = 1) => range(r, c, nr, nc),
     getDataRange() { const v = valuesOf(), f = formulasOf(); return { getValues: () => v, getFormulas: () => f }; },
-    appendRow(r) { grid.push(r); }, setFrozenRows() {}, setFrozenColumns() {}, setColumnWidth() {}, setConditionalFormatRules() {}
+    appendRow(r) { grid.push(r); }, setFrozenRows() {}, setFrozenColumns() {}, setColumnWidth() {}, setConditionalFormatRules() {},
+    getParent: () => ss, hideSheet() {}, clearContents() { grid = []; }
   };
 }
 
@@ -35,6 +36,7 @@ const store = (init = {}) => { const m = { ...init }; return { getProperty: k =>
 const scriptProps = store({ RENTCAST_API_KEY: 'rc_test', TRACERFY_API_KEY: 'tf_test' });
 const docProps = store();
 const calls = [];
+let failListings = 0;
 
 const day = 86400000;
 const now = Date.now();
@@ -58,7 +60,10 @@ const UrlFetchApp = {
       assert.strictEqual(q.get('zipCode'), '90064');
       assert.strictEqual(q.get('propertyType'), 'Single Family');
       if (p === '/properties') assert.strictEqual(q.get('saleDateRange'), '*:180');
-      if (p === '/listings/sale') { assert.strictEqual(q.get('status'), 'Inactive'); assert.strictEqual(q.get('price'), '*:2000000'); }
+      if (p === '/listings/sale') {
+        assert.strictEqual(q.get('status'), 'Inactive'); assert.strictEqual(q.get('price'), '*:2000000'); assert.strictEqual(q.get('daysOld'), '*:180');
+        if (failListings > 0) { failListings--; throw new Error('Timeout: ' + url); }
+      }
       return { getResponseCode: () => 200, getContentText: () => JSON.stringify(rentcast[p]) };
     }
     if (url.startsWith('https://tracerfy.com')) {
@@ -77,7 +82,8 @@ const ctx = {
   SpreadsheetApp: { getActive: () => ss, getUi: () => ({ alert() {} }), newDataValidation: builder, newConditionalFormatRule: builder },
   PropertiesService: { getScriptProperties: () => scriptProps, getDocumentProperties: () => docProps },
   LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
-  UrlFetchApp
+  UrlFetchApp,
+  Utilities: { sleep() {} }
 };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'Code.gs'), 'utf8'), ctx);
@@ -116,6 +122,21 @@ assert.strictEqual(edited['Outreach Status'], 'Contacted');
 assert.ok(!calls.some(c => c.url.includes('tracerfy')), 'already-traced rows are not paid for twice');
 assert.match(rows.find(r => r.Status === 'Sold')['Free Lookup'], /^=HYPERLINK/, 'link formula survives rerun');
 assert.strictEqual(scriptProps._m[Object.keys(scriptProps._m).find(k => k.startsWith('RENTCAST_USED_'))], '4', 'quota counter: 2 requests x 2 runs');
+assert.strictEqual(sheets._data.grid().length, 2, 'lookup details stored on hidden tab');
+
+// Listings time out on both tries -> sold leads still saved, error logged per lookup
+sheets.Leads.getRange(2, 1, 10, 50).clearContent(); sheets._data.clearContents();
+failListings = 2;
+ctx.runUpdate();
+rows = table();
+assert.strictEqual(rows.length, 1, 'sold kept when pending lookup fails');
+assert.strictEqual(rows[0].Status, 'Sold');
+assert.match(String(sheets.Log.grid().at(-1)[6]), /90064 pending: Timeout/);
+// Times out once, retry succeeds
+failListings = 1;
+ctx.runUpdate();
+assert.strictEqual(table().length, 2, 'retry recovers pending lead');
+assert.strictEqual(String(sheets.Log.grid().at(-1)[6]), '');
 
 // Quota guard
 scriptProps.setProperty(Object.keys(scriptProps._m).find(k => k.startsWith('RENTCAST_USED_')), '50');

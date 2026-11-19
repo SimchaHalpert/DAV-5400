@@ -96,6 +96,16 @@ test('merge: new rows added, pending upgrades to sold, manual columns kept, sold
 test('names: individuals searched by name, trusts/LLCs fall back to address', () => {
   assert.deepStrictEqual(JSON.parse(JSON.stringify(L.pickPersonName(['John Q Public Jr'], 'Individual'))), { first: 'John', last: 'Public' });
   assert.strictEqual(L.pickPersonName(['Smith Family Trust'], 'Individual'), null);
+  const nm = (n) => { const r = L.pickPersonName(n, ''); return r ? r.first + ' ' + r.last : null; };
+  // Real LA County owner-name formats (90064 live data)
+  assert.strictEqual(nm(['TRIFUNOVICH, MICHAEL & PATRICIA A']), 'Michael Trifunovich');
+  assert.strictEqual(nm(['WEBB,WILLIS L LIVING TRUST']), 'Willis Webb');
+  assert.strictEqual(nm(['LONG, JANET H TRUST']), 'Janet Long');
+  assert.strictEqual(nm(['ERNEST V TROOST']), 'Ernest Troost');
+  assert.strictEqual(nm(['CAIDEN GERALD E']), 'Gerald Caiden');
+  assert.strictEqual(nm(['AVARELLO-BEAS, CYNTHIA G']), 'Cynthia Avarello-Beas');
+  assert.strictEqual(nm(['2216 VETERAN AVE LLC']), null);
+  assert.strictEqual(nm(['SNYDER FAMILY TRUST 1995']), null);
   assert.strictEqual(L.pickPersonName(['Acme Holdings LLC'], 'Organization'), null);
   const trustLead = L.buildLeads([prop('T', { lastSaleDate: daysAgo(5), lastSalePrice: 1e6,
     owner: { names: ['Smith Living Trust'], type: 'Organization' } })], [], settings, now)[0];

@@ -53,7 +53,7 @@ Adding more zip codes means more requests. Past the free 50/month you'll need a 
 
 - **"Pending" is inferred.** RentCast only reports whether a listing is on or off the market. A listing that went off market with no sale recorded is usually in escrow, but it can also be a withdrawn or expired listing. The agent can confirm.
 - **The buyer's name isn't public until the sale records.** For pending homes, reach out through the listing agent.
-- **Recent sales** take a few weeks to show up in county records.
+- **Sold data runs about 3 months behind.** County records are slow. In the Nov 2026 test, the newest recorded 90064 sale was from August. Pending homes are the freshest leads, and they become Sold rows once the deed records.
 - **Owners held in trusts or LLCs** are common in LA. For those, the lookup link searches by address instead of name.
 - **Compliance:** Don't cold-call or text numbers flagged DNC or litigator. Email outreach must follow CAN-SPAM: identify your company, include a physical address and an unsubscribe option.
 

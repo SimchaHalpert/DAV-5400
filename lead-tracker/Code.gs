@@ -337,19 +337,45 @@ function buildTraceRequest(row) {
   return body;
 }
 
+/**
+ * Extract one person's first/last name from owner names. Handles county format
+ * ("LAST, FIRST M & SPOUSE", "WEBB, WILLIS L LIVING TRUST") and plain "First Last".
+ * Companies return null (search by address instead). ownerType is unused: LA records
+ * often leave it blank and list trusts as organizations even when a person is named.
+ */
 function pickPersonName(names, ownerType) {
   if (!names || !names.length) return null;
-  if (ownerType && ownerType !== 'Individual') return null;
+  var company = /\b(llc|l\.l\.c|inc|corp|corporation|company|ltd|lp|llp|bank|partners|partnership|properties|holdings|investments?|ventures|group|association|church|city|county|state)\b/i;
+  var trustWords = /\b(the|revocable|irrevocable|living|family|survivors?|separate|property|trusts?|trustees?|tr|tste|et\s+al|etal|estate\s+of|dated|dtd|u\/?d\/?t|agreement|declaration|of)\b/gi;
   for (var i = 0; i < names.length; i++) {
     var n = String(names[i]).trim();
-    if (!n || /\b(trust|llc|inc|corp|corporation|company|ltd|lp|llp|bank|estate|trustee|revocable|living|family|partners|properties|holdings)\b/i.test(n)) continue;
-    var parts = n.replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean);
-    if (parts.length < 2) continue;
-    // Drop suffixes like Jr / III
-    if (/^(jr|sr|ii|iii|iv)$/i.test(parts[parts.length - 1]) && parts.length > 2) parts.pop();
-    return { first: parts[0], last: parts[parts.length - 1] };
+    if (!n || company.test(n)) continue;
+    n = n.replace(/\d[\d\/-]*/g, ' ').replace(trustWords, ' ').replace(/\s+/g, ' ').trim();
+    var first, last;
+    if (n.indexOf(',') >= 0) {
+      last = n.split(',')[0].trim();
+      var rest = n.split(',').slice(1).join(' ').split(/\s*&\s*|\s+and\s+/i)[0].trim();
+      first = rest.split(/\s+/)[0];
+    } else {
+      var parts = n.split(/\s*&\s*|\s+and\s+/i)[0].replace(/\./g, ' ').split(/\s+/).filter(Boolean);
+      if (parts.length > 2 && /^(jr|sr|ii|iii|iv)$/i.test(parts[parts.length - 1])) parts.pop();
+      if (parts.length < 2) continue;
+      if (parts.length >= 3 && /^[a-z]$/i.test(parts[parts.length - 1]) && !/^[a-z]$/i.test(parts[1])) {
+        // County style without comma: "CAIDEN GERALD E" = LAST FIRST MIDDLE-INITIAL
+        first = parts[1]; last = parts[0];
+      } else {
+        first = parts[0]; last = parts[parts.length - 1];
+      }
+    }
+    last = (last || '').split(/\s+/).filter(function (w) { return !/^(jr|sr|ii|iii|iv)$/i.test(w); }).join(' ');
+    if (!first || !last || first.length < 2) continue;
+    return { first: titleCase_(first), last: titleCase_(last) };
   }
   return null;
+}
+
+function titleCase_(s) {
+  return String(s).toLowerCase().replace(/(^|[\s'-])([a-z])/g, function (m, p, c) { return p + c.toUpperCase(); });
 }
 
 /** Pull best phones/emails out of one Tracerfy lookup result. */

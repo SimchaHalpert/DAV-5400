@@ -5,7 +5,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'Code.gs'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
 const ctx = { module: { exports: {} }, console };
 vm.createContext(ctx);
 vm.runInContext(src, ctx);

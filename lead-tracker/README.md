@@ -12,23 +12,39 @@ Each sold row has a **"Look up owner"** link that opens a TruePeopleSearch searc
 | Item | Cost |
 |---|---|
 | Google Sheet + Apps Script | Free |
+| GitHub Actions (private repo) | Free (uses about 1 of the 2,000 free minutes per month per run) |
 | RentCast API, Developer plan | Free for 50 requests/month. 1 zip ≈ 2 requests per run ≈ 44/month on weekdays |
 | TruePeopleSearch link | Free (manual) |
 | Tracerfy auto-lookup (optional, off by default) | About $0.10 per match, no charge on a miss |
 
 Adding more zip codes means more requests. Past the free 50/month you'll need a paid RentCast plan. The script stops at the monthly limit you set, so you won't get surprise overage charges.
 
-## Setup (about 15 minutes)
+## How it runs
 
-1. **RentCast key:** Sign up at <https://app.rentcast.io/app/api>, pick the free Developer plan and create an API key.
-2. **(Optional) Tracerfy key:** Sign up at <https://tracerfy.com>. Account settings → API key.
-3. **Create the sheet:** Go to <https://sheets.new>, then **Extensions → Apps Script**.
-4. Delete the sample code, paste in all of [`Code.gs`](Code.gs) and click **Save**.
-5. Reload the Google Sheet. A **Lead Tracker** menu appears.
-6. **Lead Tracker → 1. Set up sheet.** Approve the Google permissions prompt. It creates the `Leads`, `Settings` and `Log` tabs.
-7. **Lead Tracker → 2. Set API keys.** Paste the keys. They're stored privately in the script, not in the sheet.
-8. **Lead Tracker → 3. Run now.** The first run backfills the last 6 months.
-9. **Lead Tracker → Turn on weekday auto-update (7am).**
+RentCast refuses connections from Google's servers, so the sheet can't fetch the data itself. Instead:
+
+```
+GitHub Actions (weekdays 7am PT) ──► RentCast API
+        │  reads zip codes / price cap from the sheet, then posts the results
+        ▼
+Google Sheet web app (Code.gs doGet/doPost) ──► builds, merges and writes leads
+```
+
+## Setup
+
+**Google Sheet**
+1. Go to <https://sheets.new>, then **Extensions → Apps Script**. Replace the sample code with [`apps-script/Code.gs`](apps-script/Code.gs) and click **Save**.
+2. Reload the sheet. Click **Lead Tracker → 1. Set up sheet** and approve the permissions prompt.
+3. In Apps Script, click **Deploy → New deployment**. Click the gear icon and pick **Web app**. Set Execute as **Me** and Who has access **Anyone**, then click **Deploy**.
+4. In the sheet, click **Lead Tracker → 2. Show GitHub sync link** and copy the link. Keep it private: anyone with it can send data to the sheet.
+
+**GitHub** (this repo → Settings → Secrets and variables → Actions → New repository secret)
+
+5. `RENTCAST_API_KEY`: your RentCast key.
+6. `SHEET_SYNC_URL`: the link from step 4.
+7. Go to **Actions → Daily lead update → Run workflow** to run it once now. After that it runs every weekday automatically.
+
+If you change `Code.gs` later, update the existing deployment instead of creating a new one: **Deploy → Manage deployments → ✏️ → Version: New version**. That keeps the same link.
 
 ## Settings tab
 
@@ -60,6 +76,7 @@ Adding more zip codes means more requests. Past the free 50/month you'll need a 
 ## Tests
 
 ```bash
-node lead-tracker/test/run_tests.js   # logic tests with mock data
-node lead-tracker/test/e2e_mock.js    # full run against a fake sheet + fake APIs
+node test/run_tests.js            # logic tests with mock data
+node test/e2e_mock.js             # direct mode against a fake sheet + fake APIs
+node test/github_sync_test.mjs    # GitHub fetcher -> fake web app -> fake sheet
 ```

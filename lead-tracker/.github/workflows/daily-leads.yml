@@ -1,0 +1,29 @@
+name: Daily lead update
+
+on:
+  schedule:
+    # Weekdays 14:17 UTC = 6:17am PST / 7:17am PDT
+    - cron: '17 14 * * 1-5'
+  workflow_dispatch: {}   # "Run workflow" button for an on-demand refresh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-leads
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Fetch RentCast data and send to Google Sheet
+        run: node fetcher/fetch.mjs
+        env:
+          RENTCAST_API_KEY: ${{ secrets.RENTCAST_API_KEY }}
+          SHEET_SYNC_URL: ${{ secrets.SHEET_SYNC_URL }}

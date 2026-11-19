@@ -86,7 +86,7 @@ const ctx = {
   Utilities: { sleep() {} }
 };
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'Code.gs'), 'utf8'), ctx);
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8'), ctx);
 
 ctx.setupSheet();
 // Turn paid lookup on for this test

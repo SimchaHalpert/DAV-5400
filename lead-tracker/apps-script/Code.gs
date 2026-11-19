@@ -63,12 +63,14 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Lead Tracker')
     .addItem('1. Set up sheet', 'setupSheet')
-    .addItem('2. Set API keys', 'setApiKeys')
-    .addItem('3. Run now', 'runUpdate')
+    .addItem('2. Show GitHub sync link', 'showSyncLink')
     .addSeparator()
+    .addItem('Set API keys', 'setApiKeys')
     .addItem('Test connection', 'testConnection')
-    .addItem('Turn on weekday auto-update (7am)', 'installTriggers')
-    .addItem('Turn off auto-update', 'removeTriggers')
+    .addSubMenu(SpreadsheetApp.getUi().createMenu('Direct mode (only if RentCast allows Google)')
+      .addItem('Run now (direct)', 'runUpdate')
+      .addItem('Turn on weekday auto-update (direct)', 'installTriggers')
+      .addItem('Turn off auto-update (direct)', 'removeTriggers'))
     .addToUi();
 }
 
@@ -112,7 +114,7 @@ function setupSheet() {
   var sheet1 = ss.getSheetByName('Sheet1');
   if (sheet1 && sheet1.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(sheet1);
 
-  SpreadsheetApp.getUi().alert('Sheet is set up. Next: Lead Tracker > 2. Set API keys.');
+  SpreadsheetApp.getUi().alert('Sheet is set up. Next: deploy the web app, then Lead Tracker > 2. Show GitHub sync link.');
 }
 
 function setApiKeys() {
@@ -124,7 +126,7 @@ function setApiKeys() {
   var r2 = ui.prompt('Tracerfy API key', 'Paste your Tracerfy API key (leave blank to skip / keep current):', ui.ButtonSet.OK_CANCEL);
   if (r2.getSelectedButton() !== ui.Button.OK) return;
   if (r2.getResponseText().trim()) props.setProperty('TRACERFY_API_KEY', r2.getResponseText().trim());
-  ui.alert('Keys saved. Run Lead Tracker > 3. Run now.');
+  ui.alert('Keys saved.');
 }
 
 /** Diagnose Google -> RentCast connectivity with one tiny request (limit=1). */
@@ -145,6 +147,7 @@ function testConnection() {
   probe('RentCast (no key)', 'https://api.rentcast.io/v1/properties?zipCode=90064&limit=1');
   if (key) probe('RentCast (your key)', 'https://api.rentcast.io/v1/properties?zipCode=90064&limit=1', { 'X-Api-Key': key, 'Accept': 'application/json' });
   else lines.push('RentCast (your key): no key saved');
+  probe('Tracerfy (no key)', 'https://tracerfy.com/v1/api/analytics/', { 'User-Agent': 'ACG-LeadTracker/1.0' });
   var msg = lines.join('\n');
   var log = SpreadsheetApp.getActive().getSheetByName(SHEET_LOG);
   if (log) log.appendRow([new Date(), '', '', '', '', '', 'Connection test: ' + lines.join(' | ')]);
@@ -175,74 +178,160 @@ function runUpdate() {
   if (!lock.tryLock(10000)) return;
   var messages = [];
   var stats = { requests: 0, added: 0, updated: 0, traced: 0, hits: 0 };
+  var now = new Date();
   try {
     var ss = SpreadsheetApp.getActive();
     var settings = readSettings_(ss);
     var props = PropertiesService.getScriptProperties();
     var rentcastKey = props.getProperty('RENTCAST_API_KEY');
-    if (!rentcastKey) throw new Error('RentCast API key missing. Use Lead Tracker > 2. Set API keys.');
-
-    var quota = new RequestQuota_(props, settings.monthlyLimit, new Date());
-    var now = new Date();
-    var fetched = [];
-
-    settings.zips.forEach(function (zip) {
+    if (!rentcastKey) throw new Error('RentCast API key missing. Use Lead Tracker > Set API keys.');
+    var quota = new RequestQuota_(props, settings.monthlyLimit, now);
+    var raw = settings.zips.map(function (zip) {
       // Each lookup is independent: if one fails, keep the other's leads.
-      var sold = [], listings = [];
+      var item = { zip: zip, sold: [], listings: [] };
       try {
-        sold = rentcastFetchAll_(rentcastKey, '/properties', {
-          zipCode: zip,
-          propertyType: settings.propertyType,
-          saleDateRange: '*:' + settings.soldDays
-        }, quota, stats);
-      } catch (e) {
-        messages.push(zip + ' sold: ' + e.message);
-      }
+        item.sold = rentcastFetchAll_(rentcastKey, '/properties', soldQuery(zip, settings), quota, stats);
+      } catch (e) { messages.push(zip + ' sold: ' + e.message); }
       try {
-        // Listings are only searchable by listed date (daysOld). A 1-year window times out,
-        // and homes that sell rarely sit 150+ days, so look back pendingDays + 120 (min 180).
-        listings = rentcastFetchAll_(rentcastKey, '/listings/sale', {
-          zipCode: zip,
-          propertyType: settings.propertyType,
-          status: 'Inactive',
-          price: '*:' + settings.maxPrice,
-          daysOld: '*:' + Math.max(180, settings.pendingDays + 120)
-        }, quota, stats);
-      } catch (e) {
-        messages.push(zip + ' pending: ' + e.message);
-      }
-      fetched = fetched.concat(buildLeads(sold, listings, settings, now));
+        item.listings = rentcastFetchAll_(rentcastKey, '/listings/sale', pendingQuery(zip, settings), quota, stats);
+      } catch (e) { messages.push(zip + ' pending: ' + e.message); }
+      return item;
     });
-
-    var leadsSheet = ss.getSheetByName(SHEET_LEADS);
-    if (!leadsSheet) throw new Error('Run Lead Tracker > 1. Set up sheet first.');
-    var existing = readLeads_(leadsSheet);
-    var merged = mergeLeads(existing, fetched, now);
-    stats.added = merged.added;
-    stats.updated = merged.updated;
-
-    // Skip trace sold homes that haven't been traced yet
-    var tracerfyKey = props.getProperty('TRACERFY_API_KEY');
-    if (settings.skipTrace && tracerfyKey) {
-      var toTrace = merged.rows.filter(function (r) {
-        return r['Status'] === STATUS_SOLD && !r['Skip Traced On'] && r._addressLine1;
-      }).slice(0, settings.maxTraces);
-      if (toTrace.length) {
-        var res = skipTrace_(tracerfyKey, toTrace, now);
-        stats.traced = res.traced; stats.hits = res.hits;
-        if (res.error) messages.push('Skip trace: ' + res.error);
-      }
-    } else if (settings.skipTrace && !tracerfyKey) {
-      messages.push('Skip trace on, but no Tracerfy key set.');
-    }
-
-    writeLeads_(leadsSheet, merged.rows);
+    processRaw_(ss, settings, raw, stats, messages, now);
     if (quota.exhausted) messages.push('Stopped early: monthly RentCast request limit reached (' + settings.monthlyLimit + ').');
     logRun_(ss, now, stats, quota.used(), messages);
   } catch (e) {
     messages.push(e.message);
-    logRun_(SpreadsheetApp.getActive(), new Date(), stats, null, messages);
+    logRun_(SpreadsheetApp.getActive(), now, stats, null, messages);
     throw e;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** RentCast query for recorded sales in a zip. Shared with the GitHub fetcher via /config. */
+function soldQuery(zip, settings) {
+  return { zipCode: zip, propertyType: settings.propertyType, saleDateRange: '*:' + settings.soldDays };
+}
+
+/**
+ * RentCast query for recently delisted listings. Listings are only searchable by listed
+ * date (daysOld). A 1-year window times out, and homes that sell rarely sit 150+ days,
+ * so look back pendingDays + 120 (min 180) and filter by off-market date in code.
+ */
+function pendingQuery(zip, settings) {
+  return { zipCode: zip, propertyType: settings.propertyType, status: 'Inactive',
+    price: '*:' + settings.maxPrice, daysOld: '*:' + Math.max(180, settings.pendingDays + 120) };
+}
+
+/** Turn raw RentCast results into lead rows, merge into the sheet, skip trace, write. */
+function processRaw_(ss, settings, raw, stats, messages, now) {
+  var fetched = [];
+  raw.forEach(function (item) {
+    fetched = fetched.concat(buildLeads(item.sold || [], item.listings || [], settings, now));
+  });
+  var leadsSheet = ss.getSheetByName(SHEET_LEADS);
+  if (!leadsSheet) throw new Error('Run Lead Tracker > 1. Set up sheet first.');
+  var merged = mergeLeads(readLeads_(leadsSheet), fetched, now);
+  stats.added = merged.added;
+  stats.updated = merged.updated;
+
+  // Skip trace sold homes that haven't been traced yet
+  var tracerfyKey = PropertiesService.getScriptProperties().getProperty('TRACERFY_API_KEY');
+  if (settings.skipTrace && tracerfyKey) {
+    var toTrace = merged.rows.filter(function (r) {
+      return r['Status'] === STATUS_SOLD && !r['Skip Traced On'] && r._addressLine1;
+    }).slice(0, settings.maxTraces);
+    if (toTrace.length) {
+      var res = skipTrace_(tracerfyKey, toTrace, now);
+      stats.traced = res.traced; stats.hits = res.hits;
+      if (res.error) messages.push('Skip trace: ' + res.error);
+    }
+  } else if (settings.skipTrace && !tracerfyKey) {
+    messages.push('Skip trace on, but no Tracerfy key set.');
+  }
+  writeLeads_(leadsSheet, merged.rows);
+}
+
+// ---------------------------------------------------------------------------
+// GitHub sync (web app). GitHub Actions fetches RentCast (which refuses connections
+// from Google's servers) and posts the results here.
+//   GET  <url>?token=..&action=config  -> settings, queries, remaining monthly requests
+//   POST <url>?token=..  {requests, results:[{zip, sold, listings}], messages}
+// Deploy: Deploy > New deployment > Web app, Execute as: Me, Who has access: Anyone.
+// The random token is the only thing protecting the endpoint — keep the link private.
+// ---------------------------------------------------------------------------
+
+function getSyncToken_() {
+  var props = PropertiesService.getScriptProperties();
+  var t = props.getProperty('SYNC_TOKEN');
+  if (!t) { t = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''); props.setProperty('SYNC_TOKEN', t); }
+  return t;
+}
+
+function showSyncLink() {
+  var ui = SpreadsheetApp.getUi();
+  var url = ScriptApp.getService().getUrl();
+  if (!url) {
+    ui.alert('Not deployed yet', 'In Apps Script: Deploy > New deployment > type "Web app", Execute as "Me", ' +
+      'Who has access "Anyone" > Deploy. Then run this menu item again.', ui.ButtonSet.OK);
+    return;
+  }
+  var link = url + '?token=' + getSyncToken_();
+  var html = HtmlService.createHtmlOutput(
+    '<p style="font-family:sans-serif">Copy this link into GitHub as the <b>SHEET_SYNC_URL</b> secret. Keep it private.</p>' +
+    '<textarea style="width:100%;height:90px" readonly onclick="this.select()">' + link + '</textarea>')
+    .setWidth(520).setHeight(200);
+  ui.showModalDialog(html, 'GitHub sync link');
+}
+
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function checkToken_(e) {
+  var given = e && e.parameter && e.parameter.token;
+  var want = PropertiesService.getScriptProperties().getProperty('SYNC_TOKEN');
+  return !!(want && given && given === want);
+}
+
+function doGet(e) {
+  if (!checkToken_(e)) return jsonOut_({ ok: false, error: 'bad token' });
+  var ss = SpreadsheetApp.getActive();
+  var settings = readSettings_(ss);
+  var quota = new RequestQuota_(PropertiesService.getScriptProperties(), settings.monthlyLimit, new Date());
+  return jsonOut_({
+    ok: true,
+    remainingRequests: Math.max(0, settings.monthlyLimit - quota.used()),
+    monthlyLimit: settings.monthlyLimit,
+    zips: settings.zips.map(function (z) {
+      return { zip: z, sold: soldQuery(z, settings), pending: pendingQuery(z, settings) };
+    })
+  });
+}
+
+function doPost(e) {
+  if (!checkToken_(e)) return jsonOut_({ ok: false, error: 'bad token' });
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return jsonOut_({ ok: false, error: 'busy' });
+  var now = new Date();
+  var stats = { requests: 0, added: 0, updated: 0, traced: 0, hits: 0 };
+  var messages = [];
+  var ss = SpreadsheetApp.getActive();
+  try {
+    var body = JSON.parse(e.postData.contents);
+    var settings = readSettings_(ss);
+    var quota = new RequestQuota_(PropertiesService.getScriptProperties(), settings.monthlyLimit, now);
+    stats.requests = Number(body.requests) || 0;
+    quota.add(stats.requests);
+    messages = (body.messages || []).slice(0, 20).map(String);
+    processRaw_(ss, settings, body.results || [], stats, messages, now);
+    logRun_(ss, now, stats, quota.used(), ['via GitHub'].concat(messages));
+    return jsonOut_({ ok: true, added: stats.added, updated: stats.updated, traced: stats.traced, hits: stats.hits });
+  } catch (err) {
+    messages.push(String(err.message || err));
+    logRun_(ss, now, stats, null, ['via GitHub'].concat(messages));
+    return jsonOut_({ ok: false, error: String(err.message || err) });
   } finally {
     lock.releaseLock();
   }
@@ -461,6 +550,10 @@ function RequestQuota_(props, limit, now) {
     this.count++;
     props.setProperty(key, String(this.count));
     return true;
+  };
+  this.add = function (n) {
+    this.count += n;
+    props.setProperty(key, String(this.count));
   };
   this.used = function () { return this.count; };
 }
@@ -733,6 +826,6 @@ function columnLetter_(n) {
 if (typeof module !== 'undefined') {
   module.exports = { buildLeads: buildLeads, mergeLeads: mergeLeads, buildTraceRequest: buildTraceRequest,
     pickPersonName: pickPersonName, parseTraceResult: parseTraceResult, applyTrace: applyTrace,
-    parseSettings: parseSettings, truePeopleSearchLink: truePeopleSearchLink, STATUS_SOLD: STATUS_SOLD, STATUS_PENDING: STATUS_PENDING,
+    parseSettings: parseSettings, soldQuery: soldQuery, pendingQuery: pendingQuery, truePeopleSearchLink: truePeopleSearchLink, STATUS_SOLD: STATUS_SOLD, STATUS_PENDING: STATUS_PENDING,
     ALL_COLUMNS: ALL_COLUMNS, formatPhone_: formatPhone_, columnLetter_: columnLetter_ };
 }
